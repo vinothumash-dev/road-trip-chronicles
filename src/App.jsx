@@ -65,21 +65,21 @@ const PHOTOS = {
   "zanskar-2025": {
     "Kargil": [
       { file: "1.jpg",  caption: "Sonamarg (en route)" },
-      { file: "2.JPg",  caption: "Dras Valley" },
+      { file: "2.JPG",  caption: "Dras Valley" },
     ],
     "Leh": [
       { file: "3.jpg",  caption: "Leh" },
+      { file: "4.JPG",  caption: "Lamayuru · Padum (en route)" },
     ],
     "Padum": [
-      { file: "4.JPg",  caption: "Lamayuru · Padum (en route)" },
       { file: "5.jpg",  caption: "Sir Sir La" },
       { file: "6.jpg",  caption: "Singe La" },
       { file: "7.jpg",  caption: "Padum" },
-      { file: "10.png", caption: "Gonbo Rangjon" },
     ],
     "Tandi": [
       { file: "8.jpg",  caption: "Padum · Darcha (en route)" },
       { file: "9.jpg",  caption: "Shinku La" },
+      { file: "10.png", caption: "Gonbo Rangjon" },
       { file: "11.jpg", caption: "Tandi" },
     ],
     "Kaza": [
@@ -90,16 +90,16 @@ const PHOTOS = {
     ],
     "Losar": [
       { file: "18.jpg", caption: "Losar" },
+      { file: "15.jpg",  caption: "Chenab River" },
+      { file: "16.jpg",  caption: "Chenab River" }
     ],
     "Hudan Bhatori": [
-      { file: "15.jpg",  caption: "Chenab River" },
-      { file: "16.jpg",  caption: "Chenab River" },
       { file: "19.jpg",  caption: "Rashil" },
       { file: "20.jpg",  caption: "Hudan Bhatori" },
       { file: "21.jpeg", caption: "Hudan Bhatori" },
-      { file: "22.jpg",  caption: "Pangi Valley" },
     ],
     "Kishtwar": [
+      { file: "22.jpg",  caption: "Pangi Valley" },
       { file: "23.jpg", caption: "Kishtwar" },
     ],
     "Srinagar": [
