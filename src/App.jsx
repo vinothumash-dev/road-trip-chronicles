@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   Mountain, MapPin, Moon, Star, AlertTriangle, Fuel, Wifi, Heart,
   ChevronDown, Route, ArrowUpDown, Navigation, Shield, Compass,
   Tent, Home, Plane, Droplets, Wind, Waves, ChevronRight, ArrowUp,
+  X, ChevronLeft, Camera,
 } from "lucide-react";
 
-// ─── THEME COLORS PER TRIP ───────────────────────────────────────────────────
+// ─── THEME COLORS ─────────────────────────────────────────────────────────────
 const THEMES = {
   "sahyadri-2023": { accent: "#059669", bg: "#05966918", border: "#05966933" },
   "sahyadri-2024": { accent: "#0891b2", bg: "#0891b218", border: "#0891b233" },
@@ -13,7 +15,99 @@ const THEMES = {
   "ladakh-2026":   { accent: "#e11d48", bg: "#e11d4818", border: "#e11d4833" },
 };
 
-// ─── SAHYADRI 2023 ───────────────────────────────────────────────────────────
+// ─── PHOTO MAPS ───────────────────────────────────────────────────────────────
+// Key = stop name, value = array of { file, caption }
+// Replace placeholders by renaming your photo to the matching number.
+const PHOTOS = {
+  "sahyadri-2023": {
+    "Gokarna": [
+      { file: "1.JPG", caption: "Murudeshwar Temple" },
+    ],
+    "Goa": [
+      { file: "2.jpg", caption: "Butterfly Beach" },
+    ],
+    "Amboli": [
+      { file: "3.jpg", caption: "Amboli Waterfalls" },
+    ],
+    "Mahad": [
+      { file: "4.JPG", caption: "Mahabaleshwar viewpoint" },
+    ],
+    "Bhagad": [
+      { file: "5.JPG", caption: "Nanemachi Waterfalls" },
+      { file: "6.png", caption: "Kumbhe Waterfalls" },
+      { file: "7.JPG", caption: "Devkund Waterfalls" },
+    ],
+  },
+  "sahyadri-2024": {
+    "Bhandardara": [
+      { file: "1.jpg", caption: "Bhandardara lake & dam" },
+      { file: "2.jpg", caption: "Vasundhara Waterfalls" },
+    ],
+    "Malshej Ghat": [
+      { file: "3.jpg",  caption: "Malshej Ghat viewpoint" },
+      { file: "4.jpg",  caption: "Aadrai Jungle Trail" },
+      { file: "5.JPG",  caption: "Kalu Top View Trek" },
+      { file: "6.jpg",  caption: "Kalu Waterfall Base Trek" },
+    ],
+    "Lonavala": [
+      { file: "7.jpg",  caption: "Ghat Road" },
+      { file: "8.jpg",  caption: "Kataldhar Waterfalls" },
+      { file: "13.jpg", caption: "Lonavala" },
+    ],
+    "Bhagad": [
+      { file: "9.jpg",  caption: "Devkund Waterfalls" },
+      { file: "10.jpg", caption: "Nanemachi Waterfalls" },
+      { file: "11.jpg", caption: "Kumbhe Waterfalls" },
+      { file: "12.jpg", caption: "Savlya Ghat Viewpoint" },
+    ],
+  },
+  "zanskar-2025": {
+    "Kargil": [
+      { file: "1.jpg",  caption: "Sonamarg (en route)" },
+      { file: "2.JPG",  caption: "Dras Valley" },
+    ],
+    "Leh": [
+      { file: "3.jpg",  caption: "Leh" },
+      { file: "4.JPG",  caption: "Lamayuru · Padum (en route)" },
+    ],
+    "Padum": [
+      { file: "5.jpg",  caption: "Sir Sir La" },
+      { file: "6.jpg",  caption: "Singe La" },
+      { file: "7.jpg",  caption: "Padum" },
+    ],
+    "Tandi": [
+      { file: "8.jpg",  caption: "Padum · Darcha (en route)" },
+      { file: "9.jpg",  caption: "Shinku La" },
+      { file: "10.png", caption: "Gonbo Rangjon" },
+      { file: "11.jpg", caption: "Tandi" },
+    ],
+    "Kaza": [
+      { file: "12.jpg", caption: "Keylong (en route)" },
+      { file: "13.jpg", caption: "Spiti River" },
+      { file: "14.jpg", caption: "Spiti Valley" },
+      { file: "17.jpg", caption: "Chicham Bridge" },
+    ],
+    "Losar": [
+      { file: "18.jpg", caption: "Losar" },
+      { file: "15.jpg",  caption: "Chenab River" },
+      { file: "16.jpg",  caption: "Chenab River" }
+    ],
+    "Hudan Bhatori": [
+      { file: "19.jpg",  caption: "Rashil" },
+      { file: "20.jpg",  caption: "Hudan Bhatori" },
+      { file: "21.jpeg", caption: "Hudan Bhatori" },
+    ],
+    "Kishtwar": [
+      { file: "22.jpg",  caption: "Pangi Valley" },
+      { file: "23.jpg", caption: "Kishtwar" },
+    ],
+    "Srinagar": [
+      { file: "24.JPG", caption: "The End" },
+    ],
+  },
+};
+
+// ─── SAHYADRI 2023 ────────────────────────────────────────────────────────────
 const SAHYADRI_2023 = {
   id: "sahyadri-2023",
   name: "Sahyadri 2023",
@@ -30,7 +124,7 @@ const SAHYADRI_2023 = {
     { num: 4, name: "Mahad",    date: "19 Sep", nights: "1N", stay: "Stay in Mahad",          enroute: ["Mahabaleshwar"],      note: null },
     { num: 5, name: "Bhagad",   date: "20–21 Sep", nights: "2N", stay: "Bhagad camp / homestay",
       enroute: ["Nanemachi Waterfalls (Day 1)", "Kumbhe Waterfalls (Day 1)", "Devkund Waterfalls (Day 2)"], note: null },
-    { num: 6, name: "Pune",     date: "22 Sep", nights: "Arrival", stay: "End of trip",       enroute: [], note: null },
+    { num: 6, name: "Pune",     date: "22 Sep", nights: "Arrival", stay: "End of trip", enroute: [], note: null },
   ],
   attractions: [
     { name: "Murudeshwar Temple",  type: "Temple",       day: "Day 1 en route" },
@@ -43,7 +137,7 @@ const SAHYADRI_2023 = {
   ],
 };
 
-// ─── SAHYADRI 2024 ───────────────────────────────────────────────────────────
+// ─── SAHYADRI 2024 ────────────────────────────────────────────────────────────
 const SAHYADRI_2024 = {
   id: "sahyadri-2024",
   name: "Sahyadri 2024",
@@ -54,36 +148,31 @@ const SAHYADRI_2024 = {
   distance: "~700 km",
   highlights: "6 waterfalls · Jungle trails · Full Sahyadri circuit",
   stops: [
-    { num: 1, name: "Bhandardara", date: "21 Sep",     nights: "1N",      stay: "Stay in Bhandardara",
+    { num: 1, name: "Bhandardara", date: "21 Sep", nights: "1N", stay: "Stay in Bhandardara",
       enroute: ["Vasundhara Waterfalls"], note: null },
-    { num: 2, name: "Malshej Ghat", date: "22–23 Sep", nights: "2N",     stay: "Stay at Malshej Ghat",
-      enroute: ["Aadrai Jungle Trail (Day 2)", "Kalu Top View Trek (Day 2)"], note: null },
-    { num: 3, name: "Lonavala",    date: "24 Sep",     nights: "1N",      stay: "Stay in Lonavala",
-      enroute: ["Kalu Waterfall Base Trek (en route)"], note: null },
-    { num: 4, name: "Bhagad",      date: "25–28 Sep",  nights: "4N",     stay: "Bhagad camp / homestay",
-      enroute: [
-        "Kataldhar Waterfalls (Day 1 en route)",
-        "Devkund Waterfalls (Day 2)",
-        "Nanemachi Waterfalls + Kumbhe Waterfalls (Day 3)",
-        "Savlya Ghat Viewpoint (Day 4)",
-      ], note: null },
-    { num: 5, name: "Mumbai",      date: "29 Sep",     nights: "Return",  stay: "End of trip",
-      enroute: [], note: null },
+    { num: 2, name: "Malshej Ghat", date: "22–23 Sep", nights: "2N", stay: "Stay at Malshej Ghat",
+      enroute: ["Aadrai Jungle Trail (Day 2)", "Kalu Top View Trek (Day 2)", "Kalu Waterfall Base Trek (Day 2)"], note: null },
+    { num: 3, name: "Lonavala", date: "24 Sep", nights: "1N", stay: "Stay in Lonavala",
+      enroute: ["Ghat Road (en route)", "Kataldhar Waterfalls (en route)"], note: null },
+    { num: 4, name: "Bhagad", date: "25–28 Sep", nights: "4N", stay: "Bhagad camp / homestay",
+      enroute: ["Devkund Waterfalls (Day 2)", "Nanemachi Waterfalls + Kumbhe Waterfalls (Day 3)", "Savlya Ghat Viewpoint (Day 4)"], note: null },
+    { num: 5, name: "Mumbai", date: "29 Sep", nights: "Return", stay: "End of trip", enroute: [], note: null },
   ],
   attractions: [
-    { name: "Vasundhara Waterfalls",    type: "Waterfall",       day: "Day 1" },
-    { name: "Aadrai Jungle Trail",      type: "Trek",            day: "Day 3" },
-    { name: "Kalu Top View Trek",       type: "Trek",            day: "Day 3" },
-    { name: "Kalu Waterfall Base Trek", type: "Waterfall + Trek",day: "Day 4 en route" },
-    { name: "Kataldhar Waterfalls",     type: "Waterfall",       day: "Day 5 en route" },
-    { name: "Devkund Waterfalls",       type: "Waterfall",       day: "Day 6" },
-    { name: "Nanemachi Waterfalls",     type: "Waterfall",       day: "Day 7" },
-    { name: "Kumbhe Waterfalls",        type: "Waterfall",       day: "Day 7" },
-    { name: "Savlya Ghat Viewpoint",    type: "Viewpoint",       day: "Day 8" },
+    { name: "Vasundhara Waterfalls",    type: "Waterfall",        day: "Day 1" },
+    { name: "Aadrai Jungle Trail",      type: "Trek",             day: "Day 3" },
+    { name: "Kalu Top View Trek",       type: "Trek",             day: "Day 3" },
+    { name: "Kalu Waterfall Base Trek", type: "Waterfall + Trek", day: "Day 3" },
+    { name: "Ghat Road",               type: "Scenic Drive",     day: "Day 4 en route" },
+    { name: "Kataldhar Waterfalls",     type: "Waterfall",        day: "Day 4 en route" },
+    { name: "Devkund Waterfalls",       type: "Waterfall",        day: "Day 6" },
+    { name: "Nanemachi Waterfalls",     type: "Waterfall",        day: "Day 7" },
+    { name: "Kumbhe Waterfalls",        type: "Waterfall",        day: "Day 7" },
+    { name: "Savlya Ghat Viewpoint",    type: "Viewpoint",        day: "Day 8" },
   ],
 };
 
-// ─── ZANSKAR 2025 ────────────────────────────────────────────────────────────
+// ─── ZANSKAR 2025 ─────────────────────────────────────────────────────────────
 const ZANSKAR_2025 = {
   id: "zanskar-2025",
   name: "Zanskar 2025",
@@ -94,17 +183,15 @@ const ZANSKAR_2025 = {
   distance: "1,884 km",
   highlights: "5 passes · 6 valleys · 7 rivers",
   stops: [
-    { num: 1, name: "Kargil",         nights: "1N", alt: "~2,676m", valley: "Dras Valley",    river: "Dras River",    stay: "Hotel in Kargil",          passes: [{ name: "Zoji La", alt: "3,528m" }], passNote: null, note: null },
-    { num: 2, name: "Leh",            nights: "1N", alt: "3,524m",  valley: "—",              river: "Indus River",   stay: "Hotel in Leh",             passes: [], passNote: "NH1 through Suru Valley", note: null },
-    { num: 3, name: "Padum",          nights: "1N", alt: "~3,657m", valley: "Zanskar Valley", river: "Suru + Zanskar Rivers", stay: "Guesthouse in Padum",
-      passes: [{ name: "Sir Sir La", alt: "~4,800m" }, { name: "Singe La", alt: "~5,090m" }],
-      passNote: "Via Lamayuru → Sir Sir La → Singe La", note: null },
-    { num: 4, name: "Tandi",          nights: "1N", alt: "~2,700m", valley: "Chenab Valley",  river: "Tsarap River",  stay: "Stay in Tandi",            passes: [{ name: "Shinku La", alt: "5,091m" }], passNote: null, note: null },
-    { num: 5, name: "Kaza",           nights: "1N", alt: "~3,800m", valley: "Spiti Valley",   river: "Spiti River",   stay: "Guesthouse in Kaza",       passes: [], passNote: "Lahaul valley road into Spiti", note: null },
-    { num: 6, name: "Losar",          nights: "1N", alt: "~4,079m", valley: "Spiti Valley",   river: "Spiti River",   stay: "Stay in Losar",            passes: [{ name: "Kunzum La", alt: "4,590m" }], passNote: null, note: null },
-    { num: 7, name: "Hudan Bhatori",  nights: "1N", alt: "~2,800m", valley: "Pangi Valley",   river: "Chenab River",  stay: "Remote village stay",      passes: [], passNote: "Pangi Valley road — one of India's most remote", note: "Sister hill range to Sural Bhatori. Extremely remote — limited facilities." },
-    { num: 8, name: "Kishtwar",       nights: "1N", alt: "~1,680m", valley: "Chenab Valley",  river: "Chenab River",  stay: "Hotel in Kishtwar",        passes: [], passNote: null, note: null },
-    { num: 9, name: "Srinagar",       nights: "Return", alt: "~1,585m", valley: "Kashmir Valley", river: "Jhelum River", stay: "End of trip",            passes: [], passNote: null, note: null },
+    { num: 1, name: "Kargil",        nights: "1N",     alt: "~2,676m", valley: "Dras Valley",    river: "Dras River",           stay: "Hotel in Kargil",        passes: [{ name: "Zoji La", alt: "3,528m" }], passNote: null, note: null,      visited: ["Sonamarg (en route)", "Dras Valley"] },
+    { num: 2, name: "Leh",           nights: "1N",     alt: "3,524m",  valley: "—",              river: "Indus River",           stay: "Hotel in Leh",           passes: [], passNote: "NH1 through Suru Valley", note: null,                              visited: ["Leh Palace", "Shanti Stupa", "Indus Valley"] },
+    { num: 3, name: "Padum",         nights: "1N",     alt: "~3,657m", valley: "Zanskar Valley", river: "Suru + Zanskar Rivers", stay: "Guesthouse in Padum",    passes: [{ name: "Sir Sir La", alt: "~4,800m" }, { name: "Singe La", alt: "~5,090m" }], passNote: "Via Lamayuru → Sir Sir La → Singe La", note: null, visited: ["Lamayuru (en route)", "Sir Sir La", "Singe La", "Padum", "Gonbo Rangjon"] },
+    { num: 4, name: "Tandi",         nights: "1N",     alt: "~2,700m", valley: "Chenab Valley",  river: "Tsarap River",          stay: "Stay in Tandi",          passes: [{ name: "Shinku La", alt: "5,091m" }], passNote: null, note: null,          visited: ["Shinku La", "Padum–Darcha stretch", "Tandi"] },
+    { num: 5, name: "Kaza",          nights: "1N",     alt: "~3,800m", valley: "Spiti Valley",   river: "Spiti River",           stay: "Guesthouse in Kaza",     passes: [], passNote: "Lahaul valley road into Spiti", note: null,                      visited: ["Keylong (en route)", "Spiti River", "Spiti Valley", "Chicham Bridge"] },
+    { num: 6, name: "Losar",         nights: "1N",     alt: "~4,079m", valley: "Spiti Valley",   river: "Spiti River",           stay: "Stay in Losar",          passes: [{ name: "Kunzum La", alt: "4,590m" }], passNote: null, note: null,          visited: ["Losar village"] },
+    { num: 7, name: "Hudan Bhatori", nights: "1N",     alt: "~2,800m", valley: "Pangi Valley",   river: "Chenab River",          stay: "Remote village stay",    passes: [], passNote: "Pangi Valley road — one of India's most remote", note: "Sister hill range to Sural Bhatori. Extremely remote — limited facilities.", visited: ["Rashil", "Chenab River", "Pangi Valley", "Hudan Bhatori"] },
+    { num: 8, name: "Kishtwar",      nights: "1N",     alt: "~1,680m", valley: "Chenab Valley",  river: "Chenab River",          stay: "Hotel in Kishtwar",      passes: [], passNote: null, note: null,                                                  visited: ["Kishtwar"] },
+    { num: 9, name: "Srinagar",      nights: "Return", alt: "~1,585m", valley: "Kashmir Valley", river: "Jhelum River",          stay: "End of trip",            passes: [], passNote: null, note: null,                                                  visited: [] },
   ],
   passes: [
     { name: "Zoji La",    alt: 3528, display: "3,528m", feet: "11,575ft", leg: "Srinagar → Kargil" },
@@ -117,7 +204,7 @@ const ZANSKAR_2025 = {
   rivers:  ["Dras", "Suru", "Indus", "Zanskar", "Tsarap", "Spiti", "Chenab"],
 };
 
-// ─── LADAKH 2026 ─────────────────────────────────────────────────────────────
+// ─── LADAKH 2026 ──────────────────────────────────────────────────────────────
 const LADAKH_STOPS = [
   { num: 1, name: "Leh",    date: "3 Oct",     nights: "Arrival",   alt: "3,524m",  sleep: "Hotel in Leh",   activities: "Arrive, rest, acclimatise. Leh Palace, Shanti Stupa, Hall of Fame. Collect all permits (ILP for Nubra, Pangong, Hanle, Karzok/Chumur) from DC office.", passes: [], passNote: null, notes: ["Spend day collecting permits. No exertion on day 1."] },
   { num: 2, name: "Diskit", date: "4–5 Oct",   nights: "1N",        alt: "3,072m",  sleep: "Guesthouse or camp in Diskit / Hunder", activities: "Diskit Monastery, 106ft Maitreya Buddha statue, Hunder sand dunes, Bactrian camel safari.", passes: [{ name: "Khardung La", alt: "5,359m" }], passNote: null, notes: ["Fill fuel fully at Diskit — last reliable petrol pump for days."] },
@@ -143,7 +230,7 @@ const LADAKH_PASSES = [
   { name: "Taglang La",    alt: 5328, display: "5,328m", feet: "17,480ft", leg: "Karzok → Thukje",        type: "high" },
 ];
 
-// ─── HOOKS ───────────────────────────────────────────────────────────────────
+// ─── HOOKS ────────────────────────────────────────────────────────────────────
 function useReveal() {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
@@ -152,7 +239,7 @@ function useReveal() {
     if (!el) return;
     const obs = new IntersectionObserver(
       ([e]) => { if (e.isIntersecting) { setVisible(true); obs.unobserve(el); } },
-      { threshold: 0.1 }
+      { threshold: 0.08 }
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -173,42 +260,274 @@ function Reveal({ children, className = "", delay = 0 }) {
   );
 }
 
-// ─── STARFIELD ───────────────────────────────────────────────────────────────
+// ─── LIGHTBOX ─────────────────────────────────────────────────────────────────
+function Lightbox({ photos, startIndex, tripId, stopName, onClose }) {
+  const [idx, setIdx] = useState(startIndex);
+  const [loaded, setLoaded] = useState(false);
+  const { accent } = THEMES[tripId];
+  const photo = photos[idx];
+  const basePath = `${import.meta.env.BASE_URL}images/${tripId}/`;
+
+  const prev = useCallback(() => { setLoaded(false); setIdx(i => (i - 1 + photos.length) % photos.length); }, [photos.length]);
+  const next = useCallback(() => { setLoaded(false); setIdx(i => (i + 1) % photos.length); }, [photos.length]);
+
+  useEffect(() => {
+    const h = (e) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft")  prev();
+      if (e.key === "ArrowRight") next();
+    };
+    window.addEventListener("keydown", h);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", h); document.body.style.overflow = ""; };
+  }, [onClose, prev, next]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.96)", backdropFilter: "blur(16px)", zIndex: 9999 }}
+      onClick={onClose}
+    >
+      {/* Close */}
+      <button
+        className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 z-10"
+        style={{ background: "#ffffff18", border: "1px solid #ffffff22" }}
+        onClick={onClose}
+      >
+        <X size={18} color="#fff" />
+      </button>
+
+      {/* Location + counter */}
+      <div className="absolute top-5 left-5 z-10">
+        <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: accent }}>{stopName}</p>
+        <p className="text-white font-medium text-sm mt-0.5">{photo.caption}</p>
+        <p className="text-xs mt-1" style={{ color: "#64748b" }}>{idx + 1} / {photos.length}</p>
+      </div>
+
+      {/* Prev arrow */}
+      {photos.length > 1 && (
+        <button
+          className="absolute left-4 md:left-8 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 z-10"
+          style={{ background: "#ffffff12", border: "1px solid #ffffff20" }}
+          onClick={e => { e.stopPropagation(); prev(); }}
+        >
+          <ChevronLeft size={22} color="#fff" />
+        </button>
+      )}
+
+      {/* Image */}
+      <div
+        className="relative flex items-center justify-center"
+        style={{ maxWidth: "min(90vw, 1100px)", maxHeight: "85vh", width: "100%" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <img
+          key={photo.file}
+          src={`${basePath}${photo.file}`}
+          alt={photo.caption}
+          onLoad={() => setLoaded(true)}
+          className="rounded-xl object-contain"
+          style={{
+            maxWidth: "100%",
+            maxHeight: "85vh",
+            opacity: loaded ? 1 : 0,
+            transform: loaded ? "scale(1)" : "scale(0.97)",
+            transition: "opacity 0.4s ease, transform 0.4s ease",
+            boxShadow: `0 0 80px ${accent}22`,
+          }}
+        />
+        {!loaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+              style={{ borderColor: `${accent} transparent transparent transparent` }} />
+          </div>
+        )}
+      </div>
+
+      {/* Next arrow */}
+      {photos.length > 1 && (
+        <button
+          className="absolute right-4 md:right-8 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 z-10"
+          style={{ background: "#ffffff12", border: "1px solid #ffffff20" }}
+          onClick={e => { e.stopPropagation(); next(); }}
+        >
+          <ChevronRight size={22} color="#fff" />
+        </button>
+      )}
+
+      {/* Dot indicators */}
+      {photos.length > 1 && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+          {photos.map((_, i) => (
+            <button key={i} onClick={e => { e.stopPropagation(); setLoaded(false); setIdx(i); }}
+              className="rounded-full transition-all duration-300"
+              style={{ width: i === idx ? 20 : 6, height: 6, background: i === idx ? accent : "#ffffff44" }} />
+          ))}
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+}
+
+// ─── PHOTO THUMBNAIL ──────────────────────────────────────────────────────────
+function PhotoThumb({ src, caption, color, onClick }) {
+  const [status, setStatus] = useState("loading"); // loading | ok | error
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <button
+      onClick={status === "ok" ? onClick : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex-shrink-0 relative rounded-xl overflow-hidden"
+      style={{
+        width: 220, height: 148,
+        scrollSnapAlign: "start",
+        cursor: status === "ok" ? "pointer" : "default",
+        background: "#0f1117",
+        border: `1px solid ${status === "error" ? "#2a2e3d" : "#1e2230"}`,
+      }}
+    >
+      {/* Image */}
+      <img
+        src={src}
+        alt=""
+        onLoad={() => setStatus("ok")}
+        onError={() => setStatus("error")}
+        style={{
+          position: "absolute", inset: 0,
+          width: "100%", height: "100%",
+          objectFit: "cover",
+          opacity: status === "ok" ? 1 : 0,
+          transform: hovered && status === "ok" ? "scale(1.06)" : "scale(1)",
+          filter: hovered && status === "ok" ? "brightness(1.08)" : "brightness(1)",
+          transition: "transform 0.45s ease, filter 0.45s ease, opacity 0.3s ease",
+        }}
+      />
+
+      {/* Loading shimmer */}
+      {status === "loading" && (
+        <div className="absolute inset-0 animate-pulse" style={{ background: "linear-gradient(90deg, #1e2230 0%, #2a2e3d 50%, #1e2230 100%)" }} />
+      )}
+
+      {/* Error state */}
+      {status === "error" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <Camera size={20} style={{ color: "#2a2e3d" }} />
+          <p className="text-xs text-center px-3" style={{ color: "#374151" }}>Photo missing<br />Re-upload file</p>
+        </div>
+      )}
+
+      {/* Caption overlay — always slightly visible at bottom, stronger on hover */}
+      {status === "ok" && (
+        <div
+          className="absolute inset-0 flex items-end"
+          style={{
+            background: hovered
+              ? "linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)"
+              : "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 55%)",
+            transition: "background 0.35s ease",
+          }}
+        >
+          <p className="text-white text-xs px-3 pb-2.5 leading-snug font-medium w-full" style={{ opacity: hovered ? 1 : 0.85, transition: "opacity 0.3s" }}>
+            {caption}
+          </p>
+        </div>
+      )}
+
+      {/* Expand icon on hover */}
+      {status === "ok" && hovered && (
+        <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center"
+          style={{ background: `${color}dd`, boxShadow: `0 0 8px ${color}88` }}>
+          <Camera size={12} color="#fff" />
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ─── PHOTO STRIP ──────────────────────────────────────────────────────────────
+function PhotoStrip({ tripId, stopName, color }) {
+  const photos = PHOTOS[tripId]?.[stopName];
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+
+  if (!photos || photos.length === 0) return null;
+  const basePath = `${import.meta.env.BASE_URL}images/${tripId}/`;
+
+  return (
+    <>
+      <div className="mt-5">
+        {/* Header */}
+        <div className="flex items-center gap-2 mb-3">
+          <Camera size={13} style={{ color }} />
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color }}>
+            {photos.length} photo{photos.length > 1 ? "s" : ""}
+          </span>
+        </div>
+
+        {/* Horizontal scroll strip */}
+        <div
+          className="flex gap-3 overflow-x-auto"
+          style={{
+            scrollSnapType: "x mandatory",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            paddingBottom: 4,
+          }}
+        >
+          {photos.map((p, i) => (
+            <PhotoThumb
+              key={p.file}
+              src={`${basePath}${p.file}`}
+              caption={p.caption}
+              color={color}
+              onClick={() => setLightboxIdx(i)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {lightboxIdx !== null && (
+        <Lightbox
+          photos={photos}
+          startIndex={lightboxIdx}
+          tripId={tripId}
+          stopName={stopName}
+          onClose={() => setLightboxIdx(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── STARFIELD + MOUNTAIN SVG ─────────────────────────────────────────────────
 function Starfield() {
   const ref = useRef(null);
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    let raf;
-    let stars = [];
+    let raf, stars = [];
     function resize() {
       canvas.width = canvas.offsetWidth * window.devicePixelRatio;
       canvas.height = canvas.offsetHeight * window.devicePixelRatio;
       ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
       stars = Array.from({ length: 200 }, () => ({
-        x: Math.random() * canvas.offsetWidth,
-        y: Math.random() * canvas.offsetHeight * 0.7,
-        r: Math.random() * 1.4 + 0.3,
-        a: Math.random(),
-        spd: Math.random() * 0.007 + 0.002,
-        ph: Math.random() * Math.PI * 2,
+        x: Math.random() * canvas.offsetWidth, y: Math.random() * canvas.offsetHeight * 0.7,
+        r: Math.random() * 1.4 + 0.3, a: Math.random(), spd: Math.random() * 0.007 + 0.002, ph: Math.random() * Math.PI * 2,
       }));
     }
     function draw(t) {
       ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
       stars.forEach(s => {
         const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * s.spd + s.ph));
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${tw * s.a})`;
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${tw * s.a})`; ctx.fill();
       });
       raf = requestAnimationFrame(draw);
     }
-    resize();
-    raf = requestAnimationFrame(draw);
-    window.addEventListener("resize", resize);
+    resize(); raf = requestAnimationFrame(draw); window.addEventListener("resize", resize);
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
   }, []);
   return <canvas ref={ref} className="absolute inset-0 w-full h-full" style={{ zIndex: 0 }} />;
@@ -226,12 +545,12 @@ function MountainSVG() {
   );
 }
 
-// ─── PORTFOLIO HERO ──────────────────────────────────────────────────────────
+// ─── PORTFOLIO HERO ───────────────────────────────────────────────────────────
 const TRIP_CARDS = [
-  { id: "sahyadri-2023", year: "'23", name: "Sahyadri 2023", route: "Mangalore → Pune",       km: "~900 km",  nights: 6, tag: "Coast + Ghats" },
-  { id: "sahyadri-2024", year: "'24", name: "Sahyadri 2024", route: "Mumbai → Mumbai",         km: "~700 km",  nights: 8, tag: "Monsoon Loop" },
-  { id: "zanskar-2025",  year: "'25", name: "Zanskar 2025",  route: "Srinagar → Srinagar",     km: "1,884 km", nights: 9, tag: "5 Passes · 6 Valleys" },
-  { id: "ladakh-2026",   year: "'26", name: "Ladakh 2026",   route: "Leh → Leh",               km: "~1,400 km",nights: 8, tag: "UPCOMING · 11 Passes", upcoming: true },
+  { id: "sahyadri-2023", year: "'23", name: "Sahyadri 2023", route: "Mangalore → Pune",   km: "~900 km",  nights: 6, tag: "Coast + Ghats" },
+  { id: "sahyadri-2024", year: "'24", name: "Sahyadri 2024", route: "Mumbai → Mumbai",     km: "~700 km",  nights: 8, tag: "Monsoon Loop" },
+  { id: "zanskar-2025",  year: "'25", name: "Zanskar 2025",  route: "Srinagar → Srinagar", km: "1,884 km", nights: 9, tag: "5 Passes · 6 Valleys" },
+  { id: "ladakh-2026",   year: "'26", name: "Ladakh 2026",   route: "Leh → Leh",           km: "~1,400 km",nights: 8, tag: "UPCOMING · 11 Passes", upcoming: true },
 ];
 
 function PortfolioHero() {
@@ -241,21 +560,9 @@ function PortfolioHero() {
       <Starfield />
       <MountainSVG />
       <div className="relative text-center px-6 pb-16" style={{ zIndex: 2 }}>
-        <Reveal>
-          <p className="text-xs tracking-[0.4em] uppercase mb-4" style={{ color: "#e11d48" }}>
-            Vinoth · Road Trip Chronicles
-          </p>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <h1 className="font-bold" style={{ fontSize: "clamp(2.8rem,7vw,6rem)", lineHeight: 1.08, color: "#f1f1f1" }}>
-            4 Trips.<br /><span style={{ color: "#e11d48" }}>One Obsession.</span>
-          </h1>
-        </Reveal>
-        <Reveal delay={0.2}>
-          <p className="mt-5 text-base max-w-lg mx-auto" style={{ color: "#64748b" }}>
-            Sahyadri '23 · Sahyadri '24 · Zanskar '25 · Ladakh '26
-          </p>
-        </Reveal>
+        <Reveal><p className="text-xs tracking-[0.4em] uppercase mb-4" style={{ color: "#e11d48" }}>Vinoth · Road Trip Chronicles</p></Reveal>
+        <Reveal delay={0.1}><h1 className="font-bold" style={{ fontSize: "clamp(2.8rem,7vw,6rem)", lineHeight: 1.08, color: "#f1f1f1" }}>4 Trips.<br /><span style={{ color: "#e11d48" }}>One Obsession.</span></h1></Reveal>
+        <Reveal delay={0.2}><p className="mt-5 text-base max-w-lg mx-auto" style={{ color: "#64748b" }}>Sahyadri '23 · Sahyadri '24 · Zanskar '25 · Ladakh '26</p></Reveal>
         <Reveal delay={0.3}>
           <div className="flex justify-center gap-8 mt-8 flex-wrap">
             {[{ label: "Total KMs", value: "~4,984" }, { label: "Total Nights", value: "31" }, { label: "Passes", value: "16" }].map(s => (
@@ -275,15 +582,8 @@ function PortfolioHero() {
                   className="rounded-xl p-4 text-left transition-all duration-300 hover:scale-105"
                   style={{ background: t.upcoming ? th.bg : "#181b25", border: `1px solid ${t.upcoming ? th.border : "#1e2230"}` }}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                      style={{ background: th.bg, color: th.accent, border: `1px solid ${th.border}` }}>
-                      {t.year}
-                    </span>
-                    {t.upcoming && (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: "#e11d48", color: "#fff" }}>
-                        UPCOMING
-                      </span>
-                    )}
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: th.bg, color: th.accent, border: `1px solid ${th.border}` }}>{t.year}</span>
+                    {t.upcoming && <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: "#e11d48", color: "#fff" }}>UPCOMING</span>}
                   </div>
                   <p className="font-bold mt-2 text-sm" style={{ color: "#f1f1f1" }}>{t.name}</p>
                   <p className="text-xs mt-0.5" style={{ color: "#64748b" }}>{t.route}</p>
@@ -299,8 +599,8 @@ function PortfolioHero() {
   );
 }
 
-// ─── SHARED: TRIP HEADER ──────────────────────────────────────────────────────
-function TripHeader({ id, name, route, dates, tagline, nights, distance, highlights, color, bg, border, badge }) {
+// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
+function TripHeader({ id, name, route, dates, tagline, nights, distance, highlights, color, bg, border }) {
   return (
     <div id={id} className="w-full py-20 px-4" style={{ background: "#0b0e15", borderTop: `2px solid ${border}` }}>
       <div className="max-w-4xl mx-auto">
@@ -308,7 +608,6 @@ function TripHeader({ id, name, route, dates, tagline, nights, distance, highlig
           <div className="flex items-center gap-3 mb-4 flex-wrap">
             <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: bg, color, border: `1px solid ${border}` }}>{name}</span>
             <span className="text-xs" style={{ color: "#475569" }}>{dates}</span>
-            {badge}
           </div>
           <h2 className="text-4xl md:text-5xl font-bold" style={{ color: "#f1f1f1" }}>{route}</h2>
           <p className="text-lg mt-3" style={{ color }}>{tagline}</p>
@@ -328,12 +627,10 @@ function TripHeader({ id, name, route, dates, tagline, nights, distance, highlig
   );
 }
 
-// ─── SHARED: SECTION LABEL ────────────────────────────────────────────────────
 function SLabel({ color, children }) {
   return <p className="text-xs tracking-[0.3em] uppercase mb-2 font-semibold" style={{ color }}>{children}</p>;
 }
 
-// ─── SHARED: WARNING BOX ──────────────────────────────────────────────────────
 function Warning({ text }) {
   return (
     <div className="flex items-start gap-3 rounded-lg p-3" style={{ background: "#92400e12", border: "1px solid #92400e33" }}>
@@ -343,9 +640,58 @@ function Warning({ text }) {
   );
 }
 
+// ─── JUMP NAV ─────────────────────────────────────────────────────────────────
+const JUMP_LINKS = [
+  { id: "sahyadri-2023", label: "Sahyadri '23" },
+  { id: "sahyadri-2024", label: "Sahyadri '24" },
+  { id: "zanskar-2025",  label: "Zanskar '25"  },
+  { id: "ladakh-2026",   label: "Ladakh '26"   },
+];
+
+function TripJumpStrip({ currentId }) {
+  return (
+    <div className="w-full py-4 px-4 overflow-x-auto" style={{ background: "#080b11", borderBottom: "1px solid #1e2230" }}>
+      <div className="flex items-center gap-2 min-w-max mx-auto w-fit">
+        <a href="#home" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 hover:scale-105"
+          style={{ background: "#1e2230", color: "#64748b", border: "1px solid #2a2e3d" }}>
+          <ArrowUp size={11} /> All Trips
+        </a>
+        <span style={{ color: "#1e2230" }}>|</span>
+        {JUMP_LINKS.map(l => {
+          const th = THEMES[l.id];
+          const active = l.id === currentId;
+          return (
+            <a key={l.id} href={`#${l.id}`}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 hover:scale-105"
+              style={{ background: active ? th.accent : th.bg, color: active ? "#fff" : th.accent, border: `1px solid ${active ? th.accent : th.border}` }}>
+              {l.label}
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NextTripButton({ nextId }) {
+  if (!nextId) return null;
+  const th = THEMES[nextId];
+  const label = JUMP_LINKS.find(l => l.id === nextId)?.label;
+  return (
+    <div className="w-full py-10 flex justify-center" style={{ background: "#080b11" }}>
+      <a href={`#${nextId}`}
+        className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold transition-all duration-300 hover:scale-105"
+        style={{ background: th.bg, color: th.accent, border: `1px solid ${th.border}` }}>
+        Next: {label} <ChevronRight size={16} />
+      </a>
+    </div>
+  );
+}
+
 // ─── SAHYADRI STOP CARD ───────────────────────────────────────────────────────
-function SahyadriStop({ stop, color, bg, border }) {
+function SahyadriStop({ stop, tripId, color, bg, border }) {
   const isEnd = stop.nights === "Arrival" || stop.nights === "Return";
+  const hasPhotos = PHOTOS[tripId]?.[stop.name]?.length > 0;
   return (
     <Reveal className="relative pl-10 md:pl-16 pb-10">
       <div className="absolute left-0 md:left-4 top-2 w-5 h-5 rounded-full flex items-center justify-center"
@@ -361,12 +707,20 @@ function SahyadriStop({ stop, color, bg, border }) {
               {stop.date && <p className="text-xs" style={{ color: "#64748b" }}>{stop.date}</p>}
             </div>
           </div>
-          {!isEnd && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
-              style={{ background: bg, color, border: `1px solid ${border}` }}>
-              <Moon size={11} /> {stop.nights}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {!isEnd && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
+                style={{ background: bg, color, border: `1px solid ${border}` }}>
+                <Moon size={11} /> {stop.nights}
+              </span>
+            )}
+            {hasPhotos && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs"
+                style={{ background: "#ffffff08", color: "#64748b", border: "1px solid #2a2e3d" }}>
+                <Camera size={11} /> {PHOTOS[tripId][stop.name].length}
+              </span>
+            )}
+          </div>
         </div>
         <div className="p-4 md:p-5 space-y-3">
           {stop.enroute.length > 0 && (
@@ -390,6 +744,9 @@ function SahyadriStop({ stop, color, bg, border }) {
             <p className="text-sm" style={{ color: "#94a3b8" }}>{stop.stay}</p>
           </div>
           {stop.note && <Warning text={stop.note} />}
+
+          {/* ── Photo strip ── */}
+          <PhotoStrip tripId={tripId} stopName={stop.name} color={color} />
         </div>
       </div>
     </Reveal>
@@ -415,7 +772,9 @@ function SahyadriSection({ data, nextId }) {
           <div className="relative">
             <div className="absolute left-2 md:left-6 top-0 bottom-0 w-px"
               style={{ background: `linear-gradient(180deg,${color}00,${color},${color},${color}00)` }} />
-            {data.stops.map(s => <SahyadriStop key={s.num} stop={s} color={color} bg={bg} border={border} />)}
+            {data.stops.map(s => (
+              <SahyadriStop key={s.num} stop={s} tripId={data.id} color={color} bg={bg} border={border} />
+            ))}
           </div>
         </div>
       </div>
@@ -450,6 +809,7 @@ function SahyadriSection({ data, nextId }) {
 // ─── ZANSKAR STOP CARD ────────────────────────────────────────────────────────
 function ZanskarStop({ stop, color, bg, border }) {
   const isReturn = stop.nights === "Return";
+  const hasPhotos = PHOTOS["zanskar-2025"]?.[stop.name]?.length > 0;
   return (
     <Reveal className="relative pl-10 md:pl-16 pb-10">
       <div className="absolute left-0 md:left-4 top-2 w-5 h-5 rounded-full flex items-center justify-center"
@@ -476,6 +836,12 @@ function ZanskarStop({ stop, color, bg, border }) {
                 <Moon size={10} /> {stop.nights}
               </span>
             )}
+            {hasPhotos && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+                style={{ background: "#ffffff08", color: "#64748b", border: "1px solid #2a2e3d" }}>
+                <Camera size={11} /> {PHOTOS["zanskar-2025"][stop.name].length}
+              </span>
+            )}
           </div>
         </div>
         <div className="p-4 md:p-5 space-y-3">
@@ -498,6 +864,22 @@ function ZanskarStop({ stop, color, bg, border }) {
               </div>
             </div>
           )}
+          {stop.visited?.length > 0 && (
+            <div className="flex items-start gap-3">
+              <MapPin size={14} className="mt-0.5 flex-shrink-0" style={{ color }} />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color }}>Visited</p>
+                <div className="flex flex-wrap gap-2">
+                  {stop.visited.map(v => (
+                    <span key={v} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs"
+                      style={{ background: bg, color, border: `1px solid ${border}` }}>
+                      <MapPin size={10} /> {v}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-start gap-3">
             <Waves size={14} className="mt-0.5 flex-shrink-0" style={{ color: "#475569" }} />
             <div>
@@ -510,6 +892,9 @@ function ZanskarStop({ stop, color, bg, border }) {
             <p className="text-sm" style={{ color: "#94a3b8" }}>{stop.stay}</p>
           </div>
           {stop.note && <Warning text={stop.note} />}
+
+          {/* ── Photo strip ── */}
+          <PhotoStrip tripId="zanskar-2025" stopName={stop.name} color={color} />
         </div>
       </div>
     </Reveal>
@@ -525,66 +910,38 @@ function ZanskarSection() {
       <TripHeader id="zanskar-2025" name={d.name} route={d.route} dates={d.dates}
         tagline={d.tagline} nights={d.nights} distance={d.distance}
         highlights={d.highlights} color={color} bg={bg} border={border} />
-
-      {/* Valleys & Rivers */}
       <div className="w-full py-12 px-4" style={{ background: "#0f1117" }}>
         <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
           <Reveal>
             <div className="rounded-xl p-5" style={{ background: "#181b25", border: "1px solid #1e2230" }}>
-              <div className="flex items-center gap-2 mb-4">
-                <Wind size={16} style={{ color }} />
-                <p className="text-sm font-semibold" style={{ color }}>Valleys Traversed</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {d.valleys.map(v => (
-                  <span key={v} className="px-3 py-1 rounded-full text-sm" style={{ background: bg, color, border: `1px solid ${border}` }}>{v}</span>
-                ))}
-              </div>
+              <div className="flex items-center gap-2 mb-4"><Wind size={16} style={{ color }} /><p className="text-sm font-semibold" style={{ color }}>Valleys Traversed</p></div>
+              <div className="flex flex-wrap gap-2">{d.valleys.map(v => <span key={v} className="px-3 py-1 rounded-full text-sm" style={{ background: bg, color, border: `1px solid ${border}` }}>{v}</span>)}</div>
             </div>
           </Reveal>
           <Reveal delay={0.1}>
             <div className="rounded-xl p-5" style={{ background: "#181b25", border: "1px solid #1e2230" }}>
-              <div className="flex items-center gap-2 mb-4">
-                <Waves size={16} style={{ color }} />
-                <p className="text-sm font-semibold" style={{ color }}>Rivers Followed</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {d.rivers.map(r => (
-                  <span key={r} className="px-3 py-1 rounded-full text-sm" style={{ background: "#1e2230", color: "#94a3b8", border: "1px solid #2a2e3d" }}>{r}</span>
-                ))}
-              </div>
+              <div className="flex items-center gap-2 mb-4"><Waves size={16} style={{ color }} /><p className="text-sm font-semibold" style={{ color }}>Rivers Followed</p></div>
+              <div className="flex flex-wrap gap-2">{d.rivers.map(r => <span key={r} className="px-3 py-1 rounded-full text-sm" style={{ background: "#1e2230", color: "#94a3b8", border: "1px solid #2a2e3d" }}>{r}</span>)}</div>
             </div>
           </Reveal>
         </div>
       </div>
-
-      {/* Timeline */}
       <div className="w-full py-16 px-4" style={{ background: "#0b0e15" }}>
         <div className="max-w-2xl mx-auto">
-          <Reveal className="mb-10">
-            <SLabel color={color}>Itinerary</SLabel>
-            <h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>Stop by Stop</h3>
-          </Reveal>
+          <Reveal className="mb-10"><SLabel color={color}>Itinerary</SLabel><h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>Stop by Stop</h3></Reveal>
           <div className="relative">
-            <div className="absolute left-2 md:left-6 top-0 bottom-0 w-px"
-              style={{ background: `linear-gradient(180deg,${color}00,${color},${color},${color}00)` }} />
+            <div className="absolute left-2 md:left-6 top-0 bottom-0 w-px" style={{ background: `linear-gradient(180deg,${color}00,${color},${color},${color}00)` }} />
             {d.stops.map(s => <ZanskarStop key={s.num} stop={s} color={color} bg={bg} border={border} />)}
           </div>
         </div>
       </div>
-
-      {/* Passes */}
       <div className="w-full py-16 px-4" style={{ background: "#0f1117" }}>
         <div className="max-w-4xl mx-auto">
-          <Reveal className="mb-10">
-            <SLabel color={color}>High Altitude</SLabel>
-            <h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>5 Passes Crossed</h3>
-          </Reveal>
+          <Reveal className="mb-10"><SLabel color={color}>High Altitude</SLabel><h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>5 Passes Crossed</h3></Reveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {[...d.passes].sort((a, b) => b.alt - a.alt).map((p, i) => (
               <Reveal key={p.name} delay={i * 0.07}>
-                <div className="rounded-xl p-5 transition-all duration-300 hover:scale-[1.03]"
-                  style={{ background: "#181b25", border: `1px solid ${border}` }}>
+                <div className="rounded-xl p-5 transition-all duration-300 hover:scale-[1.03]" style={{ background: "#181b25", border: `1px solid ${border}` }}>
                   <Mountain size={18} className="mb-3" style={{ color }} />
                   <p className="font-bold" style={{ color: "#f1f1f1" }}>{p.name}</p>
                   <p className="text-2xl font-bold mt-1" style={{ color }}>{p.display}</p>
@@ -608,8 +965,7 @@ function LadakhStop({ stop }) {
   const Icon = isEnd ? Plane : stop.nights === "2N" ? Tent : Home;
   return (
     <Reveal className="relative pl-10 md:pl-16 pb-10">
-      <div className="absolute left-0 md:left-4 top-2 w-5 h-5 rounded-full flex items-center justify-center"
-        style={{ background: color, boxShadow: "0 0 12px #e11d4866" }}>
+      <div className="absolute left-0 md:left-4 top-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: color, boxShadow: "0 0 12px #e11d4866" }}>
         <div className="w-2 h-2 rounded-full bg-white" />
       </div>
       <div className="rounded-xl overflow-hidden" style={{ background: "#181b25", border: "1px solid #1e2230" }}>
@@ -618,17 +974,13 @@ function LadakhStop({ stop }) {
             <span className="text-2xl font-bold" style={{ color }}>{String(stop.num).padStart(2, "0")}</span>
             <div>
               <h3 className="text-lg font-bold" style={{ color: "#f1f1f1" }}>
-                {stop.name}
-                {stop.label && <span className="font-normal text-sm ml-2" style={{ color: "#64748b" }}>({stop.label})</span>}
+                {stop.name}{stop.label && <span className="font-normal text-sm ml-2" style={{ color: "#64748b" }}>({stop.label})</span>}
               </h3>
               <p className="text-xs" style={{ color: "#64748b" }}>{stop.date}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
-              style={{ background: "#1e2230", color: "#94a3b8", border: "1px solid #2a2e3d" }}>
-              <Mountain size={10} /> {stop.alt}
-            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs" style={{ background: "#1e2230", color: "#94a3b8", border: "1px solid #2a2e3d" }}><Mountain size={10} /> {stop.alt}</span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
               style={{ background: stop.nights === "2N" ? "#e11d4818" : "#7c3aed18", color: stop.nights === "2N" ? "#e11d48" : "#7c3aed", border: `1px solid ${stop.nights === "2N" ? "#e11d4833" : "#7c3aed33"}` }}>
               <Moon size={10} /> {stop.nights}
@@ -636,20 +988,8 @@ function LadakhStop({ stop }) {
           </div>
         </div>
         <div className="p-4 md:p-5 space-y-3">
-          <div className="flex items-start gap-3">
-            <Icon size={14} className="mt-0.5 flex-shrink-0" style={{ color: "#7c3aed" }} />
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#7c3aed" }}>Sleep</p>
-              <p className="text-sm" style={{ color: "#cbd5e1" }}>{stop.sleep}</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <Compass size={14} className="mt-0.5 flex-shrink-0" style={{ color: "#0ea5e9" }} />
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#0ea5e9" }}>Activities</p>
-              <p className="text-sm" style={{ color: "#cbd5e1" }}>{stop.activities}</p>
-            </div>
-          </div>
+          <div className="flex items-start gap-3"><Icon size={14} className="mt-0.5 flex-shrink-0" style={{ color: "#7c3aed" }} /><div><p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#7c3aed" }}>Sleep</p><p className="text-sm" style={{ color: "#cbd5e1" }}>{stop.sleep}</p></div></div>
+          <div className="flex items-start gap-3"><Compass size={14} className="mt-0.5 flex-shrink-0" style={{ color: "#0ea5e9" }} /><div><p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#0ea5e9" }}>Activities</p><p className="text-sm" style={{ color: "#cbd5e1" }}>{stop.activities}</p></div></div>
           <div className="flex items-start gap-3">
             <Mountain size={14} className="mt-0.5 flex-shrink-0" style={{ color }} />
             <div>
@@ -663,12 +1003,8 @@ function LadakhStop({ stop }) {
                     </span>
                   ))}
                 </div>
-              ) : (
-                <p className="text-sm italic" style={{ color: "#64748b" }}>{stop.passNote || "None"}</p>
-              )}
-              {stop.passes.length > 0 && stop.passNote && (
-                <p className="text-xs mt-1.5 italic" style={{ color: "#64748b" }}>{stop.passNote}</p>
-              )}
+              ) : <p className="text-sm italic" style={{ color: "#64748b" }}>{stop.passNote || "None"}</p>}
+              {stop.passes.length > 0 && stop.passNote && <p className="text-xs mt-1.5 italic" style={{ color: "#64748b" }}>{stop.passNote}</p>}
             </div>
           </div>
           {stop.notes.map((n, i) => <Warning key={i} text={n} />)}
@@ -681,10 +1017,7 @@ function LadakhStop({ stop }) {
 function LadakhSection() {
   const [sortByAlt, setSortByAlt] = useState(false);
   const sorted = sortByAlt ? [...LADAKH_PASSES].sort((a, b) => b.alt - a.alt) : LADAKH_PASSES;
-  const color = "#e11d48";
-  const bg = "#e11d4818";
-  const border = "#e11d4833";
-
+  const color = "#e11d48", bg = "#e11d4818", border = "#e11d4833";
   return (
     <>
       <TripJumpStrip currentId="ladakh-2026" />
@@ -701,12 +1034,7 @@ function LadakhSection() {
           </Reveal>
           <Reveal delay={0.12}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10">
-              {[
-                { icon: Route,      label: "Distance",      value: "~1,400 km" },
-                { icon: Mountain,   label: "Highest Point", value: "Mig La 5,913m*", sub: "Umling La 5,799m if closed" },
-                { icon: Moon,       label: "Nights",        value: "8" },
-                { icon: Navigation, label: "Passes",        value: "11" },
-              ].map(s => {
+              {[{ icon: Route, label: "Distance", value: "~1,400 km" }, { icon: Mountain, label: "Highest Point", value: "Mig La 5,913m*", sub: "Umling La 5,799m if closed" }, { icon: Moon, label: "Nights", value: "8" }, { icon: Navigation, label: "Passes", value: "11" }].map(s => {
                 const Icon = s.icon;
                 return (
                   <div key={s.label} className="rounded-xl p-4 text-center" style={{ background: "#181b25", border: "1px solid #1e2230" }}>
@@ -721,35 +1049,21 @@ function LadakhSection() {
           </Reveal>
         </div>
       </div>
-
-      {/* Timeline */}
       <div className="w-full py-16 px-4" style={{ background: "#0f1117" }}>
         <div className="max-w-2xl mx-auto">
-          <Reveal className="mb-10">
-            <SLabel color={color}>The Route</SLabel>
-            <h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>Day-by-Day Itinerary</h3>
-          </Reveal>
+          <Reveal className="mb-10"><SLabel color={color}>The Route</SLabel><h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>Day-by-Day Itinerary</h3></Reveal>
           <div className="relative">
-            <div className="absolute left-2 md:left-6 top-0 bottom-0 w-px"
-              style={{ background: `linear-gradient(180deg,${color}00,${color},${color},${color}00)` }} />
+            <div className="absolute left-2 md:left-6 top-0 bottom-0 w-px" style={{ background: `linear-gradient(180deg,${color}00,${color},${color},${color}00)` }} />
             {LADAKH_STOPS.map(s => <LadakhStop key={s.num} stop={s} />)}
           </div>
         </div>
       </div>
-
-      {/* Passes */}
       <div className="w-full py-16 px-4" style={{ background: "#0b0e15" }}>
         <div className="max-w-4xl mx-auto">
-          <Reveal className="mb-6">
-            <SLabel color={color}>High Altitude</SLabel>
-            <h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>All 11 Passes</h3>
-          </Reveal>
+          <Reveal className="mb-6"><SLabel color={color}>High Altitude</SLabel><h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>All 11 Passes</h3></Reveal>
           <div className="flex justify-center mb-8">
-            <button onClick={() => setSortByAlt(v => !v)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 hover:scale-105"
-              style={{ background: "#1e2230", color: "#94a3b8", border: "1px solid #2a2e3d" }}>
-              <ArrowUpDown size={13} />
-              {sortByAlt ? "Sort by route order" : "Sort by altitude"}
+            <button onClick={() => setSortByAlt(v => !v)} className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 hover:scale-105" style={{ background: "#1e2230", color: "#94a3b8", border: "1px solid #2a2e3d" }}>
+              <ArrowUpDown size={13} />{sortByAlt ? "Sort by route order" : "Sort by altitude"}
             </button>
           </div>
           <div className="flex justify-center gap-4 flex-wrap mb-6">
@@ -766,9 +1080,7 @@ function LadakhSection() {
                 <Reveal key={p.name} delay={i * 0.05}>
                   <div className="rounded-xl p-5 transition-all duration-300 hover:scale-[1.03]" style={{ background: pbg, border: `1px solid ${pbd}` }}>
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <h4 className="font-bold text-sm" style={{ color: "#f1f1f1" }}>
-                        {p.name}{p.name === "Mig La" && <span style={{ color: "#fbbf24" }}>*</span>}
-                      </h4>
+                      <h4 className="font-bold text-sm" style={{ color: "#f1f1f1" }}>{p.name}{p.name === "Mig La" && <span style={{ color: "#fbbf24" }}>*</span>}</h4>
                       {p.type === "record" && <Star size={14} style={{ color: "#fbbf24" }} />}
                       {p.type === "high" && <Mountain size={14} style={{ color: "#fb7185" }} />}
                     </div>
@@ -781,19 +1093,12 @@ function LadakhSection() {
               );
             })}
           </div>
-          <p className="text-center text-xs mt-8 italic" style={{ color: "#475569" }}>
-            * Mig La access subject to army clearance — confirm on ground in Leh
-          </p>
+          <p className="text-center text-xs mt-8 italic" style={{ color: "#475569" }}>* Mig La access subject to army clearance — confirm on ground in Leh</p>
         </div>
       </div>
-
-      {/* Practical */}
       <div className="w-full py-16 px-4" style={{ background: "#0f1117" }}>
         <div className="max-w-4xl mx-auto">
-          <Reveal className="mb-10">
-            <SLabel color={color}>Be Prepared</SLabel>
-            <h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>Practical Info</h3>
-          </Reveal>
+          <Reveal className="mb-10"><SLabel color={color}>Be Prepared</SLabel><h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>Practical Info</h3></Reveal>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { icon: Shield, title: "Permits",      c: "#7c3aed", text: "ILP required for Nubra, Pangong, Hanle, Karzok/Chumur — collect from DC office Leh on Day 1." },
@@ -806,9 +1111,7 @@ function LadakhSection() {
                 <Reveal key={p.title} delay={i * 0.1}>
                   <div className="rounded-xl p-5 h-full" style={{ background: "#181b25", border: "1px solid #1e2230" }}>
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: p.c + "18" }}>
-                        <Icon size={18} style={{ color: p.c }} />
-                      </div>
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: p.c + "18" }}><Icon size={18} style={{ color: p.c }} /></div>
                       <h4 className="font-bold" style={{ color: "#f1f1f1" }}>{p.title}</h4>
                     </div>
                     <p className="text-sm leading-relaxed" style={{ color: "#94a3b8" }}>{p.text}</p>
@@ -823,58 +1126,6 @@ function LadakhSection() {
   );
 }
 
-// ─── TRIP JUMP NAV (inline strip between sections) ───────────────────────────
-const JUMP_LINKS = [
-  { id: "sahyadri-2023", label: "Sahyadri '23" },
-  { id: "sahyadri-2024", label: "Sahyadri '24" },
-  { id: "zanskar-2025",  label: "Zanskar '25"  },
-  { id: "ladakh-2026",   label: "Ladakh '26"   },
-];
-
-function TripJumpStrip({ currentId }) {
-  return (
-    <div className="w-full py-4 px-4 overflow-x-auto" style={{ background: "#080b11", borderBottom: "1px solid #1e2230" }}>
-      <div className="flex items-center gap-2 min-w-max mx-auto w-fit">
-        <a href="#home" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 hover:scale-105"
-          style={{ background: "#1e2230", color: "#64748b", border: "1px solid #2a2e3d" }}>
-          <ArrowUp size={11} /> All Trips
-        </a>
-        <span style={{ color: "#1e2230" }}>|</span>
-        {JUMP_LINKS.map(l => {
-          const th = THEMES[l.id];
-          const active = l.id === currentId;
-          return (
-            <a key={l.id} href={`#${l.id}`}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 hover:scale-105"
-              style={{
-                background: active ? th.accent : th.bg,
-                color: active ? "#fff" : th.accent,
-                border: `1px solid ${active ? th.accent : th.border}`,
-              }}>
-              {l.label}
-            </a>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function NextTripButton({ nextId }) {
-  if (!nextId) return null;
-  const th = THEMES[nextId];
-  const label = JUMP_LINKS.find(l => l.id === nextId)?.label;
-  return (
-    <div className="w-full py-10 flex justify-center" style={{ background: "#080b11" }}>
-      <a href={`#${nextId}`}
-        className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg"
-        style={{ background: th.bg, color: th.accent, border: `1px solid ${th.border}` }}>
-        Next: {label} <ChevronRight size={16} />
-      </a>
-    </div>
-  );
-}
-
 // ─── NAV ──────────────────────────────────────────────────────────────────────
 function Nav() {
   const [scrolled, setScrolled] = useState(false);
@@ -883,39 +1134,25 @@ function Nav() {
     window.addEventListener("scroll", h, { passive: true });
     return () => window.removeEventListener("scroll", h);
   }, []);
-
   const links = [
-    { label: "Home",          href: "#home",          color: "#64748b" },
-    { label: "Sahyadri '23", href: "#sahyadri-2023", color: THEMES["sahyadri-2023"].accent },
-    { label: "Sahyadri '24", href: "#sahyadri-2024", color: THEMES["sahyadri-2024"].accent },
-    { label: "Zanskar '25",  href: "#zanskar-2025",  color: THEMES["zanskar-2025"].accent },
-    { label: "Ladakh '26",   href: "#ladakh-2026",   color: THEMES["ladakh-2026"].accent },
+    { label: "Home",         href: "#home",          color: "#64748b" },
+    { label: "Sahyadri '23",href: "#sahyadri-2023", color: THEMES["sahyadri-2023"].accent },
+    { label: "Sahyadri '24",href: "#sahyadri-2024", color: THEMES["sahyadri-2024"].accent },
+    { label: "Zanskar '25", href: "#zanskar-2025",  color: THEMES["zanskar-2025"].accent },
+    { label: "Ladakh '26",  href: "#ladakh-2026",   color: THEMES["ladakh-2026"].accent },
   ];
-
   return (
     <nav className="fixed top-0 left-0 w-full z-50 transition-all duration-300"
-      style={{
-        background: scrolled ? "#0f1117ee" : "transparent",
-        backdropFilter: scrolled ? "blur(12px)" : "none",
-        borderBottom: scrolled ? "1px solid #1e2230" : "1px solid transparent",
-      }}>
+      style={{ background: scrolled ? "#0f1117ee" : "transparent", backdropFilter: scrolled ? "blur(12px)" : "none", borderBottom: scrolled ? "1px solid #1e2230" : "1px solid transparent" }}>
       <div className="flex items-center justify-between px-4 md:px-6 py-3">
         <a href="#home" className="text-sm font-bold tracking-wide" style={{ color: "#e11d48" }}>ROAD TRIPS</a>
         <div className="hidden md:flex items-center gap-5">
-          {links.map(l => (
-            <a key={l.href} href={l.href} className="text-xs tracking-wider uppercase transition-colors duration-200 hover:opacity-100 opacity-70 hover:opacity-100"
-              style={{ color: l.color }}>
-              {l.label}
-            </a>
-          ))}
+          {links.map(l => <a key={l.href} href={l.href} className="text-xs tracking-wider uppercase transition-opacity duration-200 opacity-60 hover:opacity-100" style={{ color: l.color }}>{l.label}</a>)}
         </div>
         <div className="flex md:hidden items-center gap-2">
           {[["#sahyadri-2023","'23"],["#sahyadri-2024","'24"],["#zanskar-2025","'25"],["#ladakh-2026","'26"]].map(([href, yr], i) => {
             const c = Object.values(THEMES)[i].accent;
-            return (
-              <a key={href} href={href} className="text-xs px-2 py-0.5 rounded-full font-medium"
-                style={{ background: c + "22", color: c }}>{yr}</a>
-            );
+            return <a key={href} href={href} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: c + "22", color: c }}>{yr}</a>;
           })}
         </div>
       </div>
@@ -931,9 +1168,7 @@ function Footer() {
       <p className="text-xs mt-2" style={{ color: "#475569" }}>Sahyadri '23 · Sahyadri '24 · Zanskar '25 · Ladakh '26</p>
       <p className="text-xs mt-3 italic" style={{ color: "#374151" }}>Ladakh '26 · Mig La access subject to army clearance — confirm on ground in Leh</p>
       <div className="flex justify-center gap-2 mt-6">
-        {[Mountain, Star, MapPin, Droplets, Waves].map((Icon, i) => (
-          <Icon key={i} size={13} style={{ color: "#1e2230" }} />
-        ))}
+        {[Mountain, Star, MapPin, Droplets, Waves].map((Icon, i) => <Icon key={i} size={13} style={{ color: "#1e2230" }} />)}
       </div>
     </footer>
   );
@@ -946,7 +1181,6 @@ export default function App() {
     document.body.style.background = "#0f1117";
     document.body.style.margin = "0";
   }, []);
-
   return (
     <div style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", color: "#e2e8f0", background: "#0f1117", minHeight: "100vh" }}>
       <Nav />
