@@ -1060,8 +1060,8 @@ function ZanskarMapSection({ color }) {
     if (!el) return;
 
     const observer = new IntersectionObserver(
-      ([e]) => { inViewRef.current = e.intersectionRatio >= 0.5; },
-      { threshold: [0, 0.5, 1] }
+      ([e]) => { inViewRef.current = e.intersectionRatio >= 0.85; },
+      { threshold: [0, 0.85, 1] }
     );
     observer.observe(el);
 
@@ -1275,7 +1275,23 @@ function ZanskarMapSection({ color }) {
 function ZanskarSection() {
   const d = ZANSKAR_2025;
   const { accent: color, bg, border } = THEMES["zanskar-2025"];
-  const [view, setView] = useState("map");
+  // Default: timeline. User clicks "Map" to see the interactive route map.
+  const [view, setView] = useState("timeline");
+  const mapWrapRef = useRef(null);
+
+  // When switching TO map, scroll so the map fills the viewport (route fully visible)
+  useEffect(() => {
+    if (view === "map" && mapWrapRef.current) {
+      // Small delay lets the map DOM mount before scrolling
+      const t = setTimeout(() => {
+        mapWrapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+      return () => clearTimeout(t);
+    }
+  }, [view]);
+
+  const handleToggle = (key) => setView(key);
+
   return (
     <>
       <TripJumpStrip currentId="zanskar-2025" />
@@ -1303,8 +1319,8 @@ function ZanskarSection() {
       <div className="w-full py-4 px-4" style={{ background: "#0f1117", borderTop: "1px solid #1e2230" }}>
         <div className="max-w-4xl mx-auto flex justify-center">
           <div className="inline-flex rounded-xl overflow-hidden" style={{ border: `1px solid ${border}`, background: "#181b25" }}>
-            {[["map","🗺  Map"],["timeline","☰  Timeline"]].map(([key, label]) => (
-              <button key={key} onClick={() => setView(key)}
+            {[["timeline","☰  Timeline"],["map","🗺  Map"]].map(([key, label]) => (
+              <button key={key} onClick={() => handleToggle(key)}
                 className="px-5 py-2 text-sm font-semibold transition-colors"
                 style={{
                   background: view === key ? color : "transparent",
@@ -1318,8 +1334,12 @@ function ZanskarSection() {
         </div>
       </div>
 
-      {/* ── Map view ── */}
-      {view === "map" && <ZanskarMapSection color={color} />}
+      {/* ── Map view — ref used to auto-scroll into position on toggle ── */}
+      {view === "map" && (
+        <div ref={mapWrapRef}>
+          <ZanskarMapSection color={color} />
+        </div>
+      )}
 
       {/* ── Timeline view ── */}
       {view === "timeline" && (
