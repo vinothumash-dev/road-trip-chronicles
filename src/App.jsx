@@ -22,7 +22,7 @@ const THEMES = {
 const PHOTOS = {
   "sahyadri-2023": {
     "Gokarna": [
-      { file: "1.jpg", caption: "Murudeshwar Temple" },
+      { file: "1.JPG", caption: "Murudeshwar Temple" },
     ],
     "Goa": [
       { file: "2.jpg", caption: "Butterfly Beach" },
@@ -31,12 +31,12 @@ const PHOTOS = {
       { file: "3.jpg", caption: "Amboli Waterfalls" },
     ],
     "Mahad": [
-      { file: "4.jpg", caption: "Mahabaleshwar viewpoint" },
+      { file: "4.JPG", caption: "Mahabaleshwar viewpoint" },
     ],
     "Bhagad": [
-      { file: "5.jpg", caption: "Nanemachi Waterfalls" },
-      { file: "6.jpg", caption: "Kumbhe Waterfalls" },
-      { file: "7.jpg", caption: "Devkund Waterfalls" },
+      { file: "5.JPG", caption: "Nanemachi Waterfalls" },
+      { file: "6.png", caption: "Kumbhe Waterfalls" },
+      { file: "7.JPG", caption: "Devkund Waterfalls" },
     ],
   },
   "sahyadri-2024": {
@@ -927,44 +927,94 @@ function ZanskarMapSection({ color }) {
   const mapElRef   = useRef(null);
   const lmapRef    = useRef(null);
   const routeRef   = useRef(null);
+  const dotRef     = useRef(null);
+  const labelRef   = useRef(null);
+  const cardRef    = useRef(null);
   const stopIdxRef = useRef(0);
   const wheelAccRef= useRef(0);
   const inViewRef  = useRef(false);
+  const txRef      = useRef(0); // touch start X
 
-  // All dynamic card/dot data lives in React state — avoids DOM-vs-React opacity conflict
-  const [cardData, setCardData] = useState(null); // {stop, dotX, dotY, cardX, cardY}
-  const [lbSrc, setLbSrc] = useState(null);
+  // React state: content + opacity only. left/top set via DOM refs (never in JSX style).
+  const [activeStop, setActiveStop]   = useState(null);
+  const [cardVisible, setCardVisible] = useState(false);
+  const [lbSrc, setLbSrc]             = useState(null);
 
   const basePath = `${import.meta.env.BASE_URL}images/zanskar-2025/`;
 
-  function updateForStop(si) {
+  // useCallback([]) — created ONCE. All mutable values accessed via refs.
+  // This avoids stale-closure bugs with React StrictMode double-invoke.
+  const updateForStop = useCallback((si) => {
     const L = window.L;
-    if (!L || !lmapRef.current || !mapElRef.current) return;
+    console.log("[ZMap] updateForStop", si, {
+      L: !!L, map: !!lmapRef.current,
+      el: !!mapElRef.current, route: !!routeRef.current,
+    });
+    if (!L || !lmapRef.current || !mapElRef.current || !routeRef.current) return;
     const stop = ZANSKAR_MAP_STOPS[si];
     if (!stop) return;
 
-    routeRef.current.setLatLngs(ROUTE_SLICES[si]);
+    try { routeRef.current.setLatLngs(ROUTE_SLICES[si]); }
+    catch (e) { console.error("[ZMap] setLatLngs error:", e); }
 
-    const px  = lmapRef.current.latLngToContainerPoint([stop.lat, stop.lng]);
+    const px   = lmapRef.current.latLngToContainerPoint([stop.lat, stop.lng]);
     const mapW = mapElRef.current.offsetWidth;
     const mapH = mapElRef.current.offsetHeight;
+    console.log("[ZMap] px:", { x: px.x, y: px.y }, "mapSize:", mapW, "×", mapH);
 
-    const cardW = 300;
-    const GAP   = 26;
-    const onLeft = px.x > mapW / 2;
-    const cx = onLeft ? px.x - GAP - cardW : px.x + GAP;
-    const cy = Math.min(Math.max(px.y - 100, 60), mapH - 310);
+    const isMobile = mapW < 640;
+    const cardW    = isMobile ? Math.min(270, mapW - 24) : 300;
+    const GAP      = 18;
+    const onLeft   = !isMobile && px.x > mapW / 2;
+    const cx = isMobile
+      ? Math.max(8, Math.min(mapW - cardW - 8, px.x - cardW / 2))
+      : onLeft ? px.x - GAP - cardW : px.x + GAP;
+    const cy = Math.min(Math.max(px.y - 100, 8), mapH - 280);
 
-    setCardData({ stop, dotX: px.x, dotY: px.y, cardX: cx, cardY: cy });
-  }
+    // left/top NOT in JSX style → React reconciler never resets them
+    if (dotRef.current) {
+      dotRef.current.style.left = px.x + "px";
+      dotRef.current.style.top  = px.y + "px";
+    }
+    if (labelRef.current) {
+      labelRef.current.style.left = px.x + "px";
+      labelRef.current.style.top  = (px.y + 14) + "px";
+    }
+    if (cardRef.current) {
+      cardRef.current.style.left  = cx + "px";
+      cardRef.current.style.top   = cy + "px";
+      cardRef.current.style.width = cardW + "px";
+      console.log("[ZMap] card positioned at", { cx, cy, cardW });
+    }
+
+    setActiveStop(stop);
+    setCardVisible(true);
+    console.log("[ZMap] setCardVisible(true) — render should follow");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Map init ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    let mounted = true;
+    let timer;
+
+    function go() {
+      stopIdxRef.current  = 0;
+      wheelAccRef.current = 0;
+      clearTimeout(timer);
+      timer = setTimeout(() => updateForStop(0), 400);
+    }
 
     function initMap() {
-      if (!mounted || lmapRef.current || !mapElRef.current) return;
+      if (!mapElRef.current) return;
       const L = window.L;
+      console.log("[ZMap] initMap — map already exists?", !!lmapRef.current);
+
+      if (lmapRef.current) {
+        // StrictMode re-invoke: map already created, just re-trigger
+        lmapRef.current.invalidateSize();
+        go();
+        return;
+      }
+
       const m = L.map(mapElRef.current, {
         zoomControl: false, attributionControl: false,
         dragging: false, scrollWheelZoom: false,
@@ -982,8 +1032,8 @@ function ZanskarMapSection({ color }) {
         }).addTo(m);
       });
       lmapRef.current = m;
-      stopIdxRef.current = 0;
-      setTimeout(() => { if (mounted) updateForStop(0); }, 350);
+      console.log("[ZMap] Leaflet map created ✓");
+      go();
     }
 
     if (window.L) {
@@ -1001,16 +1051,16 @@ function ZanskarMapSection({ color }) {
       document.head.appendChild(script);
     }
 
-    return () => { mounted = false; };
-  }, []);
+    return () => clearTimeout(timer);
+  }, [updateForStop]);
 
-  // ── Wheel hijacking — 2 ticks per stop ────────────────────────────────────
+  // ── Wheel (desktop) + touch (mobile) navigation ───────────────────────────
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => { inViewRef.current = entry.intersectionRatio >= 0.5; },
+      ([e]) => { inViewRef.current = e.intersectionRatio >= 0.5; },
       { threshold: [0, 0.5, 1] }
     );
     observer.observe(el);
@@ -1019,13 +1069,10 @@ function ZanskarMapSection({ color }) {
       if (!inViewRef.current || !lmapRef.current) return;
       const dir = e.deltaY > 0 ? 1 : -1;
       const si  = stopIdxRef.current;
-      // At boundaries → let page scroll naturally
       if (dir > 0 && si >= ZANSKAR_MAP_STOPS.length - 1) return;
       if (dir < 0 && si <= 0) return;
-
       e.preventDefault();
       wheelAccRef.current += dir;
-
       if (Math.abs(wheelAccRef.current) >= 2) {
         const newSi = Math.max(0, Math.min(ZANSKAR_MAP_STOPS.length - 1, si + (wheelAccRef.current > 0 ? 1 : -1)));
         wheelAccRef.current = 0;
@@ -1034,12 +1081,26 @@ function ZanskarMapSection({ color }) {
       }
     };
 
+    const onTouchStart = (e) => { txRef.current = e.touches[0].clientX; };
+    const onTouchEnd   = (e) => {
+      const dx = e.changedTouches[0].clientX - txRef.current;
+      if (Math.abs(dx) < 40) return;
+      const dir   = dx < 0 ? 1 : -1;
+      const newSi = Math.max(0, Math.min(ZANSKAR_MAP_STOPS.length - 1, stopIdxRef.current + dir));
+      if (newSi !== stopIdxRef.current) { stopIdxRef.current = newSi; updateForStop(newSi); }
+    };
+
     window.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchend",   onTouchEnd,   { passive: true });
+
     return () => {
       window.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchend",   onTouchEnd);
       observer.disconnect();
     };
-  }, []);
+  }, [updateForStop]);
 
   const TOTAL = ZANSKAR_MAP_STOPS.length;
 
@@ -1050,121 +1111,150 @@ function ZanskarMapSection({ color }) {
         @keyframes dotPulse{0%,100%{box-shadow:0 0 0 5px ${color}33,0 0 18px ${color}99}50%{box-shadow:0 0 0 9px ${color}1a,0 0 30px ${color}66}}
       `}</style>
 
-      {/* Wrapper — 100 vh block; wheel events trapped while navigating stops */}
-      <div ref={wrapRef} style={{ position: "relative", height: "100vh", overflow: "hidden", background: "#0b0e15" }}>
+      {/* Wrapper — 100svh (mobile-safe); wheel events trapped while navigating stops */}
+      <div ref={wrapRef} style={{ position: "relative", height: "100svh", overflow: "hidden", background: "#0b0e15" }}>
 
         {/* Leaflet map */}
         <div ref={mapElRef} style={{ width: "100%", height: "100%" }} />
 
-        {/* Glowing dot at current stop */}
-        {cardData && (
-          <div style={{
-            position: "absolute", zIndex: 10,
-            width: 16, height: 16, borderRadius: "50%",
-            background: color, border: "2.5px solid #fff",
-            animation: "dotPulse 2s ease infinite",
-            transform: "translate(-50%,-50%)",
-            transition: "left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1)",
-            pointerEvents: "none",
-            left: cardData.dotX, top: cardData.dotY,
-          }} />
-        )}
+        {/* Glowing dot — left/top NOT in JSX style; set via ref so React never resets them */}
+        <div ref={dotRef} style={{
+          position: "absolute", zIndex: 10,
+          width: 16, height: 16, borderRadius: "50%",
+          background: color, border: "2.5px solid #fff",
+          animation: "dotPulse 2s ease infinite",
+          transform: "translate(-50%,-50%)",
+          transition: "left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1), opacity .3s",
+          opacity: cardVisible ? 1 : 0,
+          pointerEvents: "none",
+        }} />
 
-        {/* Stop name label just below dot */}
-        {cardData && (
-          <div style={{
-            position: "absolute", zIndex: 12,
-            left: cardData.dotX, top: cardData.dotY + 13,
-            transform: "translateX(-50%)",
-            fontSize: 11, fontWeight: 700, color: "#f0f0f0",
-            textShadow: "0 1px 6px rgba(0,0,0,0.95)",
-            background: "rgba(0,0,0,0.58)",
-            padding: "2px 8px", borderRadius: 99,
-            whiteSpace: "nowrap", pointerEvents: "none",
-            transition: "left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1)",
-          }}>
-            {cardData.stop.name}
-          </div>
-        )}
+        {/* Stop name label — left/top set via ref */}
+        <div ref={labelRef} style={{
+          position: "absolute", zIndex: 12,
+          transform: "translateX(-50%)",
+          fontSize: 11, fontWeight: 700, color: "#f0f0f0",
+          textShadow: "0 1px 6px rgba(0,0,0,0.95)",
+          background: "rgba(0,0,0,0.58)",
+          padding: "2px 8px", borderRadius: 99,
+          whiteSpace: "nowrap", pointerEvents: "none",
+          opacity: cardVisible ? 1 : 0,
+          transition: "left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1), opacity .3s",
+        }}>
+          {activeStop?.name}
+        </div>
 
-        {/* Info card — all positioning via React state, so opacity is never overridden */}
-        {cardData && (
-          <div style={{
-            position: "absolute", zIndex: 20, width: 300,
-            background: "rgba(12,14,24,0.86)",
-            border: `1px solid rgba(124,58,237,0.4)`,
-            borderRadius: 14,
-            left: cardData.cardX, top: cardData.cardY,
-            transition: "left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1), opacity .3s",
-            opacity: 1,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.65)",
-          }}>
-            {/* Header */}
-            <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid #1e2230", display: "flex", alignItems: "center", gap: 9 }}>
-              <span style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1, minWidth: 30 }}>{cardData.stop.num}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f1f1" }}>{cardData.stop.name}</div>
-                <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>{cardData.stop.ele} · {cardData.stop.valley}</div>
+        {/* Info card — left/top set via ref; opacity controlled by cardVisible state */}
+        <div ref={cardRef} style={{
+          position: "absolute", zIndex: 20, width: 300,
+          background: "rgba(12,14,24,0.86)",
+          border: `1px solid rgba(124,58,237,0.4)`,
+          borderRadius: 14,
+          opacity: cardVisible ? 1 : 0,
+          transition: "left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1), opacity .3s",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.65)",
+          pointerEvents: cardVisible ? "auto" : "none",
+        }}>
+          {activeStop && (
+            <>
+              {/* Header */}
+              <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid #1e2230", display: "flex", alignItems: "center", gap: 9 }}>
+                <span style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1, minWidth: 30 }}>{activeStop.num}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f1f1" }}>{activeStop.name}</div>
+                  <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>{activeStop.ele} · {activeStop.valley}</div>
+                </div>
+                <span style={{ fontSize: 10, padding: "2px 9px", borderRadius: 99, background: `${color}18`, color, border: `1px solid ${color}33`, flexShrink: 0 }}>{activeStop.nights}</span>
               </div>
-              <span style={{ fontSize: 10, padding: "2px 9px", borderRadius: 99, background: `${color}18`, color, border: `1px solid ${color}33`, flexShrink: 0 }}>{cardData.stop.nights}</span>
-            </div>
-            {/* Body */}
-            <div style={{ padding: "10px 14px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-              {cardData.stop.passes?.length > 0 && (
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                  <span style={{ fontSize: 14 }}>⛰️</span>
-                  <div>
-                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".12em", color, marginBottom: 4 }}>Passes</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {cardData.stop.passes.map(p => (
-                        <span key={p.n} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, color: "#94a3b8", border: "1px solid #2a2e3d" }}>{p.n} · {p.a}</span>
-                      ))}
+              {/* Body */}
+              <div style={{ padding: "10px 14px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                {activeStop.passes?.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <span style={{ fontSize: 14 }}>⛰️</span>
+                    <div>
+                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".12em", color, marginBottom: 4 }}>Passes</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {activeStop.passes.map(p => (
+                          <span key={p.n} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, color: "#94a3b8", border: "1px solid #2a2e3d" }}>{p.n} · {p.a}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              {cardData.stop.visited?.length > 0 && (
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                  <span style={{ fontSize: 14 }}>📍</span>
-                  <div>
-                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".12em", color, marginBottom: 4 }}>Visited</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {cardData.stop.visited.map(v => (
-                        <span key={v} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: `${color}12`, color, border: `1px solid ${color}2e` }}>{v}</span>
-                      ))}
+                )}
+                {activeStop.visited?.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <span style={{ fontSize: 14 }}>📍</span>
+                    <div>
+                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".12em", color, marginBottom: 4 }}>Visited</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {activeStop.visited.map(v => (
+                          <span key={v} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: `${color}12`, color, border: `1px solid ${color}2e` }}>{v}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              {/* Photo thumbnails inside card */}
-              {cardData.stop.photos?.length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-                  {cardData.stop.photos.slice(0, 5).map((p, i) => (
-                    <div key={p.f + i} onClick={() => setLbSrc({ src: basePath + p.f, cap: p.c })}
-                      style={{ width: 46, height: 46, borderRadius: "50%", overflow: "hidden", border: `2px solid ${color}88`, cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.7)", flexShrink: 0 }}>
-                      <img src={basePath + p.f} alt={p.c} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+                )}
+                {activeStop.photos?.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                    {activeStop.photos.slice(0, 5).map((p, i) => (
+                      <div key={p.f + i} onClick={() => setLbSrc({ src: basePath + p.f, cap: p.c })}
+                        style={{ width: 46, height: 46, borderRadius: "50%", overflow: "hidden", border: `2px solid ${color}88`, cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.7)", flexShrink: 0 }}>
+                        <img src={basePath + p.f} alt={p.c} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
-        {/* Progress pill — stop counter */}
-        {cardData && (
+        {/* ‹ Prev / Next › buttons — visible on all screens, essential on mobile */}
+        {(() => {
+          const btnBase = {
+            position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 25,
+            background: "rgba(12,14,24,0.78)", border: `1px solid ${color}44`,
+            color: "#f1f1f1", borderRadius: "50%",
+            width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 22, fontWeight: 700, cursor: "pointer",
+            boxShadow: "0 4px 18px rgba(0,0,0,0.55)",
+            transition: "opacity .2s, background .2s",
+            userSelect: "none",
+          };
+          const isFirst = !activeStop || activeStop === ZANSKAR_MAP_STOPS[0];
+          const isLast  = !activeStop || activeStop === ZANSKAR_MAP_STOPS[ZANSKAR_MAP_STOPS.length - 1];
+          const nav = (dir) => {
+            const si = Math.max(0, Math.min(ZANSKAR_MAP_STOPS.length - 1, stopIdxRef.current + dir));
+            if (si !== stopIdxRef.current) { stopIdxRef.current = si; updateForStop(si); }
+          };
+          return (
+            <>
+              <button onClick={() => nav(-1)} aria-label="Previous stop"
+                style={{ ...btnBase, left: 12, opacity: isFirst ? 0.25 : 0.85, pointerEvents: isFirst ? "none" : "auto" }}>‹</button>
+              <button onClick={() => nav(1)}  aria-label="Next stop"
+                style={{ ...btnBase, right: 12, opacity: isLast  ? 0.25 : 0.85, pointerEvents: isLast  ? "none" : "auto" }}>›</button>
+            </>
+          );
+        })()}
+
+        {/* Progress pill */}
+        {activeStop && (
           <div style={{ position: "absolute", bottom: 18, left: "50%", transform: "translateX(-50%)", zIndex: 20, display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#64748b", background: "rgba(15,17,23,0.85)", padding: "5px 16px", borderRadius: 99, border: "1px solid #1e2230", whiteSpace: "nowrap" }}>
             <span style={{ color, fontWeight: 700 }}>{stopIdxRef.current + 1}</span>
             <span>/</span>
             <span>{TOTAL}</span>
             <span style={{ width: 1, height: 10, background: "#1e2230", display: "inline-block" }} />
-            <span style={{ color: "#94a3b8" }}>{cardData.stop.name}</span>
+            <span style={{ color: "#94a3b8" }}>{activeStop.name}</span>
           </div>
         )}
 
-        {/* Scroll hint — visible only at first stop */}
-        <div style={{ position: "absolute", bottom: 52, left: "50%", transform: "translateX(-50%)", zIndex: 20, textAlign: "center", pointerEvents: "none", opacity: cardData?.stop.num === "S" ? 1 : 0, transition: "opacity .5s" }}>
-          <div style={{ fontSize: 10, letterSpacing: ".25em", textTransform: "uppercase", color: "#475569", marginBottom: 6 }}>Scroll to travel</div>
+        {/* Scroll/swipe hint — visible only at first stop */}
+        <div style={{ position: "absolute", bottom: 52, left: "50%", transform: "translateX(-50%)", zIndex: 20, textAlign: "center", pointerEvents: "none", opacity: activeStop?.num === "S" ? 1 : 0, transition: "opacity .5s" }}>
+          <div style={{ fontSize: 10, letterSpacing: ".25em", textTransform: "uppercase", color: "#475569", marginBottom: 6 }}>
+            <span className="hidden sm:inline">Scroll</span>
+            <span className="sm:hidden">Swipe</span>
+            &nbsp;to travel
+          </div>
           <div style={{ width: 14, height: 14, borderRight: "2px solid #475569", borderBottom: "2px solid #475569", transform: "rotate(45deg)", margin: "0 auto", animation: "mapBob .8s ease infinite alternate" }} />
         </div>
       </div>
@@ -1185,6 +1275,7 @@ function ZanskarMapSection({ color }) {
 function ZanskarSection() {
   const d = ZANSKAR_2025;
   const { accent: color, bg, border } = THEMES["zanskar-2025"];
+  const [view, setView] = useState("map");
   return (
     <>
       <TripJumpStrip currentId="zanskar-2025" />
@@ -1207,7 +1298,46 @@ function ZanskarSection() {
           </Reveal>
         </div>
       </div>
-      <ZanskarMapSection color={color} />
+
+      {/* ── Map / Timeline toggle ── */}
+      <div className="w-full py-4 px-4" style={{ background: "#0f1117", borderTop: "1px solid #1e2230" }}>
+        <div className="max-w-4xl mx-auto flex justify-center">
+          <div className="inline-flex rounded-xl overflow-hidden" style={{ border: `1px solid ${border}`, background: "#181b25" }}>
+            {[["map","🗺  Map"],["timeline","☰  Timeline"]].map(([key, label]) => (
+              <button key={key} onClick={() => setView(key)}
+                className="px-5 py-2 text-sm font-semibold transition-colors"
+                style={{
+                  background: view === key ? color : "transparent",
+                  color: view === key ? "#fff" : "#64748b",
+                  border: "none", cursor: "pointer",
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Map view ── */}
+      {view === "map" && <ZanskarMapSection color={color} />}
+
+      {/* ── Timeline view ── */}
+      {view === "timeline" && (
+        <div className="w-full py-16 px-4" style={{ background: "#0f1117" }}>
+          <div className="max-w-4xl mx-auto">
+            <Reveal className="mb-10">
+              <SLabel color={color}>Route</SLabel>
+              <h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>Stop by Stop</h3>
+            </Reveal>
+            <div className="relative">
+              <div className="absolute left-2 md:left-6 top-0 bottom-0 w-px" style={{ background: `linear-gradient(to bottom, ${color}33, ${color}88 30%, ${color}88 70%, ${color}22)` }} />
+              {d.stops.map((stop, i) => (
+                <ZanskarStop key={stop.name + i} stop={stop} color={color} bg={bg} border={border} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="w-full py-16 px-4" style={{ background: "#0f1117" }}>
         <div className="max-w-4xl mx-auto">
           <Reveal className="mb-10"><SLabel color={color}>High Altitude</SLabel><h3 className="text-2xl font-bold" style={{ color: "#f1f1f1" }}>5 Passes Crossed</h3></Reveal>
