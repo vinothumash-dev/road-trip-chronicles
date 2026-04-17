@@ -559,7 +559,7 @@ function PortfolioHero() {
       style={{ minHeight: "100vh", background: "linear-gradient(180deg,#050810 0%,#0f1117 100%)" }}>
       <Starfield />
       <MountainSVG />
-      <div className="relative text-center px-6 pb-16" style={{ zIndex: 2 }}>
+      <div className="relative text-center px-6 pt-20 pb-16" style={{ zIndex: 2 }}>
         <Reveal><p className="text-xs tracking-[0.4em] uppercase mb-4" style={{ color: "#e11d48" }}>Vinoth · Road Trip Chronicles</p></Reveal>
         <Reveal delay={0.1}><h1 className="font-bold" style={{ fontSize: "clamp(2.8rem,7vw,6rem)", lineHeight: 1.08, color: "#f1f1f1" }}>4 Trips.<br /><span style={{ color: "#e11d48" }}>One Obsession.</span></h1></Reveal>
         <Reveal delay={0.2}><p className="mt-5 text-base max-w-lg mx-auto" style={{ color: "#64748b" }}>Sahyadri '23 · Sahyadri '24 · Zanskar '25 · Ladakh '26</p></Reveal>
