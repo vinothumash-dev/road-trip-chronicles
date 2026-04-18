@@ -934,8 +934,8 @@ function ZanskarMapSection({ color }) {
   const wheelAccRef = useRef(0);
   const inViewRef   = useRef(false);
   const txRef       = useRef(0);       // touch start X
-  const moveEndRef  = useRef(null);    // cleanup handle for flyTo moveend listener
-  const mapReadyRef = useRef(false);   // true once the first flyTo completes
+  const moveEndRef  = useRef(null);    // unused (kept for future use)
+  const mapReadyRef = useRef(false);   // true once the first stop is positioned
   const exitAccRef  = useRef(0);       // counts scroll events at map edges before releasing page
 
   // React state: content + opacity only. left/top set via DOM refs (never in JSX style).
@@ -945,64 +945,41 @@ function ZanskarMapSection({ color }) {
 
   const basePath = `${import.meta.env.BASE_URL}images/zanskar-2025/`;
 
-  // FPV updateForStop — flyTo animates the map camera to each stop.
-  // Overlays (dot/label/card) are position:fixed so they must use
-  // viewport-absolute coords via getBoundingClientRect(). They are
-  // hidden during the flight and revealed on moveend.
+  // Static-map updateForStop — map never moves (tiles load once, zero flicker).
+  // Dot/card/label are position:fixed using viewport coords from getBoundingClientRect.
+  // mapReadyRef is set true on first call to unlock scroll navigation.
   const updateForStop = useCallback((si) => {
     const L = window.L;
     if (!L || !lmapRef.current || !mapElRef.current || !routeRef.current) return;
     const stop = ZANSKAR_MAP_STOPS[si];
     if (!stop) return;
 
-    // Draw route up to this stop
     try { routeRef.current.setLatLngs(ROUTE_SLICES[si]); } catch(_) {}
 
-    // Hide overlays while the camera is flying
-    setCardVisible(false);
+    // Container-local → viewport-absolute for position:fixed overlays
+    const px   = lmapRef.current.latLngToContainerPoint([stop.lat, stop.lng]);
+    const rect = mapElRef.current.getBoundingClientRect();
+    const mapW = rect.width;
+    const mapH = rect.height;
+    const vx   = rect.left + px.x;
+    const vy   = rect.top  + px.y;
 
-    // Remove any stale moveend listener from a previous rapid navigation
-    if (moveEndRef.current) {
-      lmapRef.current.off('moveend', moveEndRef.current);
-      moveEndRef.current = null;
-    }
+    const isMobile = mapW < 640;
+    const cardW    = isMobile ? Math.min(270, mapW - 24) : 300;
+    const GAP      = 18;
+    const onLeft   = !isMobile && px.x > mapW / 2;
+    const cx = isMobile
+      ? rect.left + Math.max(8, Math.min(mapW - cardW - 8, px.x - cardW / 2))
+      : onLeft ? vx - GAP - cardW : vx + GAP;
+    const cy = Math.min(Math.max(vy - 100, rect.top + 8), rect.top + mapH - 280);
 
-    // Called once the map has settled at the new position
-    const onMoveEnd = () => {
-      moveEndRef.current = null;
-      mapReadyRef.current = true; // unlock scroll navigation
-      if (!lmapRef.current || !mapElRef.current) return;
+    if (dotRef.current)   { dotRef.current.style.left   = vx + "px"; dotRef.current.style.top   = vy + "px"; }
+    if (labelRef.current) { labelRef.current.style.left = vx + "px"; labelRef.current.style.top = (vy + 14) + "px"; }
+    if (cardRef.current)  { cardRef.current.style.left  = cx + "px"; cardRef.current.style.top  = cy + "px"; cardRef.current.style.width = cardW + "px"; }
 
-      // Container-local → viewport-absolute (needed for position:fixed overlays)
-      const px   = lmapRef.current.latLngToContainerPoint([stop.lat, stop.lng]);
-      const rect = mapElRef.current.getBoundingClientRect();
-      const mapW = rect.width;
-      const mapH = rect.height;
-      const vx   = rect.left + px.x;
-      const vy   = rect.top  + px.y;
-
-      const isMobile = mapW < 640;
-      const cardW    = isMobile ? Math.min(270, mapW - 24) : 300;
-      const GAP      = 18;
-      const onLeft   = !isMobile && px.x > mapW / 2;
-      const cx = isMobile
-        ? rect.left + Math.max(8, Math.min(mapW - cardW - 8, px.x - cardW / 2))
-        : onLeft ? vx - GAP - cardW : vx + GAP;
-      const cy = Math.min(Math.max(vy - 100, rect.top + 8), rect.top + mapH - 280);
-
-      if (dotRef.current)   { dotRef.current.style.left   = vx + "px"; dotRef.current.style.top   = vy + "px"; }
-      if (labelRef.current) { labelRef.current.style.left = vx + "px"; labelRef.current.style.top = (vy + 14) + "px"; }
-      if (cardRef.current)  { cardRef.current.style.left  = cx + "px"; cardRef.current.style.top  = cy + "px"; cardRef.current.style.width = cardW + "px"; }
-
-      setActiveStop(stop);
-      setCardVisible(true);
-    };
-
-    moveEndRef.current = onMoveEnd;
-    lmapRef.current.once('moveend', onMoveEnd);
-
-    // FPV camera: fly to this stop at zoom 11 (immersive ground-level detail)
-    lmapRef.current.flyTo([stop.lat, stop.lng], 11, { duration: 0.55, easeLinearity: 0.6 });
+    setActiveStop(stop);
+    setCardVisible(true);
+    mapReadyRef.current = true; // first call unlocks scroll navigation
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Map init ──────────────────────────────────────────────────────────────
@@ -1013,9 +990,9 @@ function ZanskarMapSection({ color }) {
       stopIdxRef.current  = 0;
       wheelAccRef.current = 0;
       exitAccRef.current  = 0;
-      mapReadyRef.current = false; // block scroll until first flyTo lands
+      mapReadyRef.current = false;
       clearTimeout(timer);
-      timer = setTimeout(() => updateForStop(0), 400);
+      timer = setTimeout(() => updateForStop(0), 350);
     }
 
     function initMap() {
@@ -1023,7 +1000,6 @@ function ZanskarMapSection({ color }) {
       const L = window.L;
 
       if (lmapRef.current) {
-        // StrictMode second-invoke: map already created, just re-trigger
         lmapRef.current.invalidateSize();
         go();
         return;
@@ -1033,20 +1009,20 @@ function ZanskarMapSection({ color }) {
         zoomControl: false, attributionControl: false,
         dragging: false, scrollWheelZoom: false,
         doubleClickZoom: false, touchZoom: false, keyboard: false,
-        preferCanvas: true,   // Canvas renderer — much faster for large polylines
+        preferCanvas: true, // Canvas renderer — far faster for large polylines
       });
-      // dark_nolabels (no graticule grid lines) + dark_only_labels (place names) stacked
+      // dark_nolabels (no graticule lines) + dark_only_labels stacked
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",    { maxZoom: 19 }).addTo(m);
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", { maxZoom: 19 }).addTo(m);
 
-      // Start with a wide overview — flyTo will zoom in to the first stop
-      m.setView([33.5, 76.5], 6);
+      // Fit to the full route — map never moves after this, tiles load once
+      m.fitBounds(L.polyline(ZANSKAR_GPX).getBounds(), { padding: [60, 60] });
 
       // Ghost route (full circuit, faint) + animated progress route
-      L.polyline(ZANSKAR_GPX, { color, weight: 2, opacity: 0.15, dashArray: "5,4" }).addTo(m);
-      routeRef.current = L.polyline([], { color, weight: 3.5, opacity: 0.9 }).addTo(m);
+      L.polyline(ZANSKAR_GPX, { color, weight: 2, opacity: 0.18, dashArray: "5,4" }).addTo(m);
+      routeRef.current = L.polyline([], { color, weight: 3.5, opacity: 0.95 }).addTo(m);
 
-      // Waypoint markers for all stops
+      // Waypoint markers
       ZANSKAR_MAP_STOPS.forEach((s, i) => {
         const isEnd = i === 0 || i === ZANSKAR_MAP_STOPS.length - 1;
         L.circleMarker([s.lat, s.lng], {
@@ -1074,12 +1050,7 @@ function ZanskarMapSection({ color }) {
       document.head.appendChild(script);
     }
 
-    return () => {
-      clearTimeout(timer);
-      if (moveEndRef.current && lmapRef.current) {
-        lmapRef.current.off('moveend', moveEndRef.current);
-      }
-    };
+    return () => clearTimeout(timer);
   }, [updateForStop]);
 
   // ── Wheel (desktop) + touch (mobile) navigation ───────────────────────────
@@ -1094,7 +1065,7 @@ function ZanskarMapSection({ color }) {
     observer.observe(el);
 
     const onWheel = (e) => {
-      // Block scroll until map is visible AND the first flyTo has landed
+      // Block scroll until map is visible AND the first stop has been positioned
       if (!inViewRef.current || !lmapRef.current || !mapReadyRef.current) return;
 
       const dir    = e.deltaY > 0 ? 1 : -1;
@@ -1109,7 +1080,8 @@ function ZanskarMapSection({ color }) {
           e.preventDefault(); // still trap – user must scroll 5× more to leave
           return;
         }
-        exitAccRef.current = 0; // reset; let page scroll naturally this time
+        exitAccRef.current = 0;
+        setCardVisible(false); // clear card/label before handing back page scroll
         return;
       }
 
@@ -1239,16 +1211,7 @@ function ZanskarMapSection({ color }) {
                     </div>
                   </div>
                 )}
-                {activeStop.photos?.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-                    {activeStop.photos.slice(0, 5).map((p, i) => (
-                      <div key={p.f + i} onClick={() => setLbSrc({ src: basePath + p.f, cap: p.c })}
-                        style={{ width: 46, height: 46, borderRadius: "50%", overflow: "hidden", border: `2px solid ${color}88`, cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.7)", flexShrink: 0 }}>
-                        <img src={basePath + p.f} alt={p.c} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {/* Photos removed — shown in the Timeline view instead */}
               </div>
             </>
           )}
@@ -1293,14 +1256,37 @@ function ZanskarMapSection({ color }) {
           </div>
         )}
 
-        {/* Scroll/swipe hint — visible only at first stop */}
-        <div style={{ position: "absolute", bottom: 52, left: "50%", transform: "translateX(-50%)", zIndex: 20, textAlign: "center", pointerEvents: "none", opacity: activeStop?.num === "S" ? 1 : 0, transition: "opacity .5s" }}>
-          <div style={{ fontSize: 10, letterSpacing: ".25em", textTransform: "uppercase", color: "#475569", marginBottom: 6 }}>
+        {/* ── Begin Journey CTA — shown only at the first stop ── */}
+        <div style={{
+          position: "absolute", bottom: "12%", left: "50%",
+          transform: "translateX(-50%)", zIndex: 9910,
+          textAlign: "center", pointerEvents: "none",
+          opacity: activeStop?.num === "S" ? 1 : 0,
+          transition: "opacity .6s",
+        }}>
+          <div style={{ fontSize: 9, letterSpacing: ".35em", textTransform: "uppercase", color, fontWeight: 700, marginBottom: 8 }}>
+            Zanskar Circuit · 2025
+          </div>
+          <div style={{ fontSize: 17, color: "#f1f1f1", fontWeight: 700, marginBottom: 4 }}>
+            Travel the route
+          </div>
+          <div style={{ fontSize: 10, color: "#64748b", marginBottom: 18 }}>
             <span className="hidden sm:inline">Scroll</span>
             <span className="sm:hidden">Swipe</span>
-            &nbsp;to travel
+            {" "}through {ZANSKAR_MAP_STOPS.length - 2} stops &nbsp;·&nbsp; use ‹ › buttons on mobile
           </div>
-          <div style={{ width: 14, height: 14, borderRight: "2px solid #475569", borderBottom: "2px solid #475569", transform: "rotate(45deg)", margin: "0 auto", animation: "mapBob .8s ease infinite alternate" }} />
+          {/* Bouncing chevron */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: 10, height: 10,
+                borderRight: `2px solid ${color}`, borderBottom: `2px solid ${color}`,
+                transform: "rotate(45deg)",
+                opacity: 1 - i * 0.3,
+                animation: `mapBob .8s ease ${i * 0.15}s infinite alternate`,
+              }} />
+            ))}
+          </div>
         </div>
       </div>
 
