@@ -1020,7 +1020,9 @@ function ZanskarMapSection({ color }) {
         dragging: false, scrollWheelZoom: false,
         doubleClickZoom: false, touchZoom: false, keyboard: false,
       });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 19 }).addTo(m);
+      // dark_nolabels = basemap without graticule lines; dark_only_labels = place names on top
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",  { maxZoom: 19 }).addTo(m);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", { maxZoom: 19 }).addTo(m);
       m.fitBounds(L.polyline(ZANSKAR_GPX).getBounds(), { padding: [55, 55] });
       L.polyline(ZANSKAR_GPX, { color, weight: 2, opacity: 0.18, dashArray: "5,4" }).addTo(m);
       routeRef.current = L.polyline([], { color, weight: 3.5, opacity: 0.9 }).addTo(m);
@@ -1117,9 +1119,10 @@ function ZanskarMapSection({ color }) {
         {/* Leaflet map */}
         <div ref={mapElRef} style={{ width: "100%", height: "100%" }} />
 
-        {/* Glowing dot — left/top NOT in JSX style; set via ref so React never resets them */}
+        {/* Glowing dot — position:fixed escapes Leaflet's stacking context.
+            left/top set via ref using viewport coords from getBoundingClientRect */}
         <div ref={dotRef} style={{
-          position: "absolute", zIndex: 10,
+          position: "fixed", zIndex: 9901,
           width: 16, height: 16, borderRadius: "50%",
           background: color, border: "2.5px solid #fff",
           animation: "dotPulse 2s ease infinite",
@@ -1129,9 +1132,9 @@ function ZanskarMapSection({ color }) {
           pointerEvents: "none",
         }} />
 
-        {/* Stop name label — left/top set via ref */}
+        {/* Stop name label — position:fixed, viewport coords */}
         <div ref={labelRef} style={{
-          position: "absolute", zIndex: 12,
+          position: "fixed", zIndex: 9902,
           transform: "translateX(-50%)",
           fontSize: 11, fontWeight: 700, color: "#f0f0f0",
           textShadow: "0 1px 6px rgba(0,0,0,0.95)",
@@ -1144,9 +1147,9 @@ function ZanskarMapSection({ color }) {
           {activeStop?.name}
         </div>
 
-        {/* Info card — left/top set via ref; opacity controlled by cardVisible state */}
+        {/* Info card — position:fixed, viewport coords */}
         <div ref={cardRef} style={{
-          position: "absolute", zIndex: 20, width: 300,
+          position: "fixed", zIndex: 9903, width: 300,
           background: "rgba(12,14,24,0.86)",
           border: `1px solid rgba(124,58,237,0.4)`,
           borderRadius: 14,
@@ -1212,7 +1215,7 @@ function ZanskarMapSection({ color }) {
         {/* ‹ Prev / Next › buttons — visible on all screens, essential on mobile */}
         {(() => {
           const btnBase = {
-            position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 25,
+            position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 9910,
             background: "rgba(12,14,24,0.78)", border: `1px solid ${color}44`,
             color: "#f1f1f1", borderRadius: "50%",
             width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center",
@@ -1239,7 +1242,7 @@ function ZanskarMapSection({ color }) {
 
         {/* Progress pill */}
         {activeStop && (
-          <div style={{ position: "absolute", bottom: 18, left: "50%", transform: "translateX(-50%)", zIndex: 20, display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#64748b", background: "rgba(15,17,23,0.85)", padding: "5px 16px", borderRadius: 99, border: "1px solid #1e2230", whiteSpace: "nowrap" }}>
+          <div style={{ position: "absolute", bottom: 18, left: "50%", transform: "translateX(-50%)", zIndex: 9910, display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#64748b", background: "rgba(15,17,23,0.85)", padding: "5px 16px", borderRadius: 99, border: "1px solid #1e2230", whiteSpace: "nowrap" }}>
             <span style={{ color, fontWeight: 700 }}>{stopIdxRef.current + 1}</span>
             <span>/</span>
             <span>{TOTAL}</span>
