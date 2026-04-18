@@ -903,7 +903,7 @@ function ZanskarStop({ stop, color, bg, border }) {
 }
 
 // ─── ZANSKAR MAP STOPS ────────────────────────────────────────────────────────
-// Correct chronological order: Srinagar → Kargil → Leh → Padum → Tandi → Losar → Kaza → Hudan Bhatori → Kishtwar → Srinagar
+// Correct chronological order: Srinagar → Kargil → Leh → Padum → Tandi → Kaza → Losar → Hudan Bhatori → Kishtwar → Srinagar
 // GPX indices from new GPX file (sampled every 38th point → 1,285 coords)
 const ZANSKAR_MAP_STOPS = [
   { num:"S",  name:"Srinagar",      nights:"Start", lat:34.084, lng:74.797, gpxIdx:0,    ele:"1,585 m", valley:"Kashmir Valley",  passes:[], visited:["Dal Lake","Srinagar city"],              photos:[{f:"24.JPG",c:"Srinagar"}] },
@@ -911,8 +911,8 @@ const ZANSKAR_MAP_STOPS = [
   { num:"02", name:"Leh",           nights:"1N",    lat:34.152, lng:77.576, gpxIdx:268,  ele:"3,524 m", valley:"Indus Valley",    passes:[], visited:["Leh Palace","Shanti Stupa","Indus Valley"], photos:[{f:"3.jpg",c:"Leh"}] },
   { num:"03", name:"Padum",         nights:"2N",    lat:33.462, lng:76.932, gpxIdx:464,  ele:"3,657 m", valley:"Zanskar Valley",  passes:[{n:"Sir Sir La",a:"4,800 m"},{n:"Singe La",a:"5,059 m"}], visited:["Lamayuru (en route)","Sir Sir La","Singe La","Padum","Gonbo Rangjon"], photos:[{f:"4.JPg",c:"Lamayuru"},{f:"5.jpg",c:"Sir Sir La"},{f:"6.jpg",c:"Singe La"},{f:"7.jpg",c:"Padum"},{f:"10.png",c:"Gonbo Rangjon"}] },
   { num:"04", name:"Tandi",         nights:"1N",    lat:32.534, lng:76.967, gpxIdx:605,  ele:"2,594 m", valley:"Lahaul Valley",   passes:[{n:"Shinku La",a:"5,091 m"}], visited:["Shinku La","Padum-Darcha","Tandi"], photos:[{f:"8.jpg",c:"Padum-Darcha"},{f:"9.jpg",c:"Shinku La"},{f:"11.jpg",c:"Tandi"}] },
-  { num:"05", name:"Losar",         nights:"1N",    lat:32.440, lng:77.748, gpxIdx:704,  ele:"4,079 m", valley:"Upper Spiti",     passes:[{n:"Kunzum La",a:"4,590 m"}], visited:["Losar village"], photos:[{f:"18.jpg",c:"Losar"}] },
-  { num:"06", name:"Kaza",          nights:"2N",    lat:32.229, lng:78.067, gpxIdx:737,  ele:"3,800 m", valley:"Spiti Valley",    passes:[], visited:["Keylong (en route)","Spiti River","Spiti Valley","Chicham Bridge"], photos:[{f:"12.jpg",c:"Keylong"},{f:"13.jpg",c:"Spiti River"},{f:"14.jpg",c:"Spiti Valley"},{f:"17.jpg",c:"Chicham Bridge"}] },
+  { num:"05", name:"Kaza",          nights:"2N",    lat:32.229, lng:78.067, gpxIdx:704,  ele:"3,800 m", valley:"Spiti Valley",    passes:[], visited:["Keylong (en route)","Spiti River","Spiti Valley","Chicham Bridge"], photos:[{f:"12.jpg",c:"Keylong"},{f:"13.jpg",c:"Spiti River"},{f:"14.jpg",c:"Spiti Valley"},{f:"17.jpg",c:"Chicham Bridge"}] },
+  { num:"06", name:"Losar",         nights:"1N",    lat:32.440, lng:77.748, gpxIdx:737,  ele:"4,079 m", valley:"Upper Spiti",     passes:[{n:"Kunzum La",a:"4,590 m"}], visited:["Losar village"], photos:[{f:"18.jpg",c:"Losar"}] },
   { num:"07", name:"Hudan Bhatori", nights:"1N",    lat:32.880, lng:76.470, gpxIdx:938,  ele:"~2,200 m",valley:"Pangi Valley",   passes:[], visited:["Rashil","Chenab River","Pangi Valley","Hudan Bhatori"], photos:[{f:"15.jpg",c:"Chenab River"},{f:"16.jpg",c:"Chenab River"},{f:"19.jpg",c:"Rashil"},{f:"20.jpg",c:"Hudan Bhatori"},{f:"21.jpeg",c:"Hudan Bhatori"},{f:"22.jpg",c:"Pangi Valley"}] },
   { num:"08", name:"Kishtwar",      nights:"1N",    lat:33.313, lng:75.773, gpxIdx:1029, ele:"1,672 m", valley:"Chenab Valley",   passes:[], visited:["Kishtwar town"], photos:[{f:"23.jpg",c:"Kishtwar"}] },
   { num:"E",  name:"Srinagar",      nights:"End",   lat:34.065, lng:74.790, gpxIdx:1284, ele:"1,585 m", valley:"Kashmir Valley",  passes:[], visited:["Journey complete"], photos:[] },
@@ -1012,8 +1012,8 @@ function ZanskarMapSection({ color }) {
         preferCanvas: true, // Canvas renderer — far faster for large polylines
       });
       // dark_nolabels (no graticule lines) + dark_only_labels stacked
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",    { maxZoom: 19 }).addTo(m);
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", { maxZoom: 19 }).addTo(m);
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",      { maxZoom: 16, attribution: "" }).addTo(m);
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxZoom: 16, attribution: "" }).addTo(m);
 
       // Fit to the full route — map never moves after this, tiles load once
       m.fitBounds(L.polyline(ZANSKAR_GPX).getBounds(), { padding: [60, 60] });
