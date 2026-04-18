@@ -948,6 +948,10 @@ function ZanskarMapSection({ color }) {
   const exitAccRef  = useRef(0);       // counts scroll events at map edges before releasing page
   const passElsRef  = useRef([]);      // DOM refs for the 5 pass marker overlays
 
+  const hidePassMarkers = useCallback(() => {
+    passElsRef.current.forEach(el => { if (el) el.style.opacity = "0"; });
+  }, []);
+
   // React state: content + opacity only. left/top set via DOM refs (never in JSX style).
   const [activeStop, setActiveStop]   = useState(null);
   const [cardVisible, setCardVisible] = useState(false);
@@ -1108,7 +1112,7 @@ function ZanskarMapSection({ color }) {
           return;
         }
         exitAccRef.current = 0;
-        setCardVisible(false); // clear card/label before handing back page scroll
+        setCardVisible(false); hidePassMarkers(); // clear card/label/passes before handing back page scroll
         return;
       }
 
